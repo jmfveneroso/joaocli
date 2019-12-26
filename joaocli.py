@@ -4,6 +4,7 @@ from __future__ import print_function
 import argparse
 import datetime
 import io
+import json
 import os
 import pickle
 import subprocess
@@ -15,8 +16,7 @@ from googleapiclient import errors
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
-chrome_location = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' 
-# '/opt/google/chrome/chrome'
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 class Entry:
   def __init__(self, type, text, tags=[]):
@@ -29,8 +29,8 @@ def gdrive_authenticate():
   # The file token.pickle stores the user's access and refresh tokens, and is
   # created automatically when the authorization flow completes for the first
   # time.
-  if os.path.exists('token.pickle'):
-    with open('token.pickle', 'rb') as token:
+  if os.path.exists(dir_path + '/token.pickle'):
+    with open(dir_path + '/token.pickle', 'rb') as token:
       creds = pickle.load(token)
 
   # If there are no (valid) credentials available, let the user log in.
@@ -39,12 +39,12 @@ def gdrive_authenticate():
       creds.refresh(Request())
     else:
       flow = InstalledAppFlow.from_client_secrets_file(
-        'credentials.json', SCOPES
+        dir_path + '/credentials.json', SCOPES
       )
       creds = flow.run_local_server(port=0)
 
     # Save the credentials for the next run
-    with open('token.pickle', 'wb') as token:
+    with open(dir_path + '/token.pickle', 'wb') as token:
       pickle.dump(creds, token)
 
   return build('drive', 'v3', credentials=creds)
@@ -55,11 +55,11 @@ def sync():
   try:
     service = gdrive_authenticate()
     download_file = True
-    if os.path.isfile('knowledge.yml'):
+    if os.path.isfile(dir_path + '/knowledge.yml'):
       f = service.files().get(fileId=file_id, fields='modifiedTime').execute()
       dt = datetime.datetime.strptime(f['modifiedTime'], '%Y-%m-%dT%H:%M:%S.%fZ')
       remote_timestamp = int(dt.timestamp())
-      local_timestamp = os.stat("knowledge.yml")[8] + 3600 * 3 # 3 hours.
+      local_timestamp = os.stat(dir_path + "/knowledge.yml")[8] + 3600 * 3 # 3 hours.
       download_file = remote_timestamp > local_timestamp
 
     if download_file:
@@ -72,33 +72,56 @@ def sync():
       while done is False:
         _, done = downloader.next_chunk()
 
-      with open("knowledge.yml", "wb") as f:
+      with open(dir_path + "/knowledge.yml", "wb") as f:
         f.write(fh.getbuffer())
     else:
       print('Uploading file...')
       updated_file = service.files().update(
         fileId=file_id,
         media_body=MediaFileUpload(
-          'knowledge.yml', 'text/plain', resumable=True
+          dir_path + '/knowledge.yml', 'text/plain', resumable=True
         )
       ).execute()
   except errors.HttpError as error:
     print('An error occurred: %s' % error)
 
+config = {}
+def load_config():
+  global config
+  with open(dir_path + '/config.json') as json_file:
+    config = json.load(json_file)
+
+def remove_stop_words(arr):
+  pass
+
+def produce_dict_entries(key, entry, knowledge_points):
+  knowledge_points[key] = entry
+  if 'tags' in entry:
+    for q in entry['tags']:
+      knowledge_points[q] = entry
+
+  arr = key.split('-')
+  knowledge_points[' '.join(arr)] = entry
+  knowledge_points[''.join(arr)] = entry
+
 def load_knowledge_points():
   knowledge_points = {}
-  with open("knowledge.yml", "r") as f:
+  with open(dir_path + "/knowledge.yml", "r") as f:
     content = f.read()
     entries = yaml.safe_load(content)
     for key in entries:
       e = entries[key]
-      knowledge_points[key] = e
-      if 'tags' in e:
-        for q in e['tags']:
-          knowledge_points[q] = e
+      produce_dict_entries(key, e, knowledge_points)
+
+      # knowledge_points[key] = e
+      # if 'tags' in e:
+      #   for q in e['tags']:
+      #     knowledge_points[q] = e
   return knowledge_points 
 
 if __name__ == '__main__':
+  load_config()
+
   parser = argparse.ArgumentParser(
     prog='joaocli', 
     description='Command line interface (CLI) for Joao.'
@@ -117,7 +140,14 @@ if __name__ == '__main__':
   if command in knowledge_points:
     q = knowledge_points[command]
     if 'type' in q and q['type'] == 'chrome':
-      subprocess.run([chrome_location, '--new-tab', q['text']])
+      subprocess.run([config['chrome-path'], '--new-tab', q['text']])
+    elif 'type' in q and q['type'] == 'img':
+      subprocess.run([config['open'], dir_path + '/files/' + q['text']])
+    elif 'type' in q and q['type'] == 'file':
+      with open(dir_path + '/files/' + q['text'], 'r') as f:
+        print(f.read())
+    elif 'type' in q and q['type'] == 'bash':
+      subprocess.run(q['text'].split())
     else:
       print(q['text'])
   else:
