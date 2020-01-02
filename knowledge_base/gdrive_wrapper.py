@@ -84,6 +84,21 @@ class GdriveWrapper():
       files[f['name']] = { 'id': f['id'], 'timestamp': timestamp }
     return files
 
+  def get_file_in_folder(self, filename, folder_id):
+    self.service.files().emptyTrash().execute()
+    q = "name = '%s' and '%s' in parents" % (filename, folder_id)
+    response = self.service.files().list(
+        q=q,
+        fields='files(id, name, modifiedTime)',
+        orderBy='name'
+    ).execute()
+
+    if len(response['files']) == 0:
+      return None
+
+    file_id = response['files'][0]['id']
+    return self.download_file(file_id)
+
   def download_file(self, file_id):
     # request = self.service.files().export_media(
     request = self.service.files().get_media(fileId=file_id)
