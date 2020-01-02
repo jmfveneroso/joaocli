@@ -1,6 +1,7 @@
 #!/usr/local/bin/python3
 
 import os
+from datetime import datetime
 
 class FileManager():
   def __init__(self, gdrive_wrapper):
@@ -34,14 +35,19 @@ class FileManager():
     for f in remote_only:
       file_id = remote_files[f]
       # self.gdrive.download_file(file_id, local_path)
+      # with open(dir_path + "/files/" + filename, "wb") as f:
+      #   f.write(file_buffer)
       print('Downloaded %s' % f)
 
     print('Uploading local only files.')
     for f in local_only:
-      # self.gdrive.upload_file(path + '/' + f)
-      # with open(dir_path + "/files/" + filename, "wb") as f:
-      #   f.write(fh.getbuffer())
-      # os.utime(dir_path + "/files/" + filename, (timestamp, timestamp))
+      self.gdrive.upload_file(
+        remote_folder_id,
+        f,
+        os.path.join(local_path, f),
+      )
+      ts = datetime.now().timestamp()
+      os.utime(os.path.join(local_path, f), (ts, ts))
       print('Uploaded %s' % f)
 
     print('Resolving conflicts.')

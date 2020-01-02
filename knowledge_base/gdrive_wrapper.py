@@ -48,6 +48,19 @@ class GdriveWrapper():
 
     self.service = build('drive', 'v3', credentials=creds)
 
+  def create_folder(self, folder_name):
+    file_metadata = {
+      'name': folder_name,
+      'mimeType': 'application/vnd.google-apps.folder'
+    }
+    response = self.service.files().create(body=file_metadata, 
+                                        fields='id').execute()
+    return response['id']
+
+  def delete_folder(self, folder_id):
+    self.service.files().delete(fileId=folder_id).execute()
+    self.service.files().emptyTrash().execute()
+
   def get_file_timestamp(self, file_id):
     f = self.service.files().get(
         fileId=file_id, fields='modifiedTime').execute()
@@ -90,7 +103,7 @@ class GdriveWrapper():
       'parents': [folder_id]
     }
     media = MediaFileUpload(path, mimetype='text/plain')
-    service.files().create(body=file_metadata, media_body=media).execute()
+    self.service.files().create(body=file_metadata, media_body=media).execute()
 
   def update_file(self, file_id, path):
     service.files().update(
