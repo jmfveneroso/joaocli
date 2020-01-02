@@ -3,3 +3,4 @@ credentials.json
 knowledge.yml
 config.json
 files/*
+*.pyc
