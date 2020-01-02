@@ -1,6 +1,5 @@
 #!/usr/local/bin/python3
 
-from __future__ import print_function
 import argparse
 import datetime
 import io
@@ -17,13 +16,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-
-class Entry:
-  def __init__(self, type, text, tags=[]):
-    self.type = type
-    self.text = text
-
-SCOPES = ['https://www.googleapis.com/auth/drive']
 def gdrive_authenticate():
   creds = None
   # The file token.pickle stores the user's access and refresh tokens, and is
@@ -38,6 +30,7 @@ def gdrive_authenticate():
     if creds and creds.expired and creds.refresh_token:
       creds.refresh(Request())
     else:
+      SCOPES = ['https://www.googleapis.com/auth/drive']
       flow = InstalledAppFlow.from_client_secrets_file(
         dir_path + '/credentials.json', SCOPES
       )
@@ -50,38 +43,124 @@ def gdrive_authenticate():
   return build('drive', 'v3', credentials=creds)
 
 def sync():
-  file_id = '1MuaSM4kIRJ4Zz2iIViMOaaz3VG6iH9Q8YLzlXK40mfE'
-
+  folder_id = '16dRHX58zL2Wh721T5q_8yZ2ulP3hq2Gm'
   try:
     service = gdrive_authenticate()
-    download_file = True
-    if os.path.isfile(dir_path + '/knowledge.yml'):
+    service.files().emptyTrash().execute()
+    response = service.files().list(q='\'' + folder_id + '\' in parents').execute()
+    local_files =  {filename for filename in os.listdir(dir_path + '/files/') if not filename.endswith('.swp') and not filename.startswith('.')}
+    remote_files = {item['name']: item['id'] for item in response['files']}
+
+    files = {}
+    for filename in local_files:
+      local_timestamp = os.stat(dir_path + "/files/" + filename)[8]
+      remote_timestamp = 0
+      if not filename in remote_files:
+        files[filename] = (local_timestamp, 0, 0)
+        continue
+      
+      file_id = remote_files[filename]
       f = service.files().get(fileId=file_id, fields='modifiedTime').execute()
       dt = datetime.datetime.strptime(f['modifiedTime'], '%Y-%m-%dT%H:%M:%S.%fZ')
-      remote_timestamp = int(dt.timestamp())
-      local_timestamp = os.stat(dir_path + "/knowledge.yml")[8] + 3600 * 3 # 3 hours.
-      download_file = remote_timestamp > local_timestamp
+      remote_timestamp = int(dt.timestamp()) - 3600 * 3 # 3 hours.
+      files[filename] = (local_timestamp, remote_timestamp, file_id)
 
-    if download_file:
-      print('Downloading file...')
-      request = service.files().export_media(fileId=file_id, mimeType='text/plain')
-      fh = io.BytesIO()
-      downloader = MediaIoBaseDownload(fh, request)
+    for filename in remote_files:
+      if filename in local_files:
+        continue
 
-      done = False
-      while done is False:
-        _, done = downloader.next_chunk()
+      file_id = remote_files[filename]
+      f = service.files().get(fileId=file_id, fields='modifiedTime').execute()
+      dt = datetime.datetime.strptime(f['modifiedTime'], '%Y-%m-%dT%H:%M:%S.%fZ')
+      remote_timestamp = int(dt.timestamp()) - 3600 * 3 # 3 hours.
+      files[filename] = (0, remote_timestamp, file_id)
 
-      with open(dir_path + "/knowledge.yml", "wb") as f:
-        f.write(fh.getbuffer())
-    else:
-      print('Uploading file...')
-      updated_file = service.files().update(
-        fileId=file_id,
-        media_body=MediaFileUpload(
-          dir_path + '/knowledge.yml', 'text/plain', resumable=True
-        )
-      ).execute()
+    keys = [k for k in files]
+    keys.sort()
+
+    for filename in keys:
+      local_timestamp = files[filename][0]
+      remote_timestamp = files[filename][1]
+      dt = datetime.datetime.fromtimestamp(local_timestamp) 
+      local_time = dt.strftime("%d/%m/%Y %H:%M:%S")
+      dt = datetime.datetime.fromtimestamp(files[filename][1]) 
+      remote_time = dt.strftime("%d/%m/%Y %H:%M:%S")
+
+      file_id = files[filename][2]
+      action = ['Do Nothing', 'Upload', 'Download'][0]
+      if local_timestamp == 0:
+        print(filename + ' - Remote: ' + remote_time)
+        proceed = input('Download file ' + filename + '? (y/n)\n') == 'y'
+        if not proceed:
+          continue
+
+        request = service.files().export_media(fileId=file_id, mimeType='text/plain')
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+
+        done = False
+        while done is False:
+          _, done = downloader.next_chunk()
+
+        with open(dir_path + "/files/" + filename, "wb") as f:
+          f.write(fh.getbuffer())
+        os.utime(dir_path + "/files/" + filename, (remote_timestamp, remote_timestamp))
+        print('(DOWNLOADED) ' + filename)
+      elif remote_timestamp == 0:
+        print(filename + ' - Local: ' + local_time)
+        proceed = input('Upload file ' + filename + '? (y/n)\n') == 'y'
+        if not proceed:
+          continue
+
+        file_metadata = {
+          'name': filename,
+          'parents': [folder_id]
+        }
+        media = MediaFileUpload(dir_path + '/files/' + filename, mimetype='text/plain')
+        service.files().create(body=file_metadata,
+                               media_body=media,
+                               fields='id').execute()
+        new_timestamp = datetime.datetime.now().timestamp()
+        os.utime(dir_path + "/files/" + filename, (new_timestamp, new_timestamp))
+        print('(UPLOADED) ' + filename)
+      else:
+        print(filename + ' - Local: ' + local_time + ' - Remote: ' + remote_time)
+
+        if abs(remote_timestamp - local_timestamp) > 100: # 5 minutes.
+          if remote_timestamp > local_timestamp:
+            proceed = input('Download file ' + filename + '? (y/n)\n') == 'y'
+            if not proceed:
+              continue
+
+            request = service.files().export_media(fileId=file_id, mimeType='text/plain')
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+
+            done = False
+            while done is False:
+              _, done = downloader.next_chunk()
+
+            with open(dir_path + "/files/" + filename, "wb") as f:
+              f.write(fh.getbuffer())
+            os.utime(dir_path + "/files/" + filename, (remote_timestamp, remote_timestamp))
+            print('(DOWNLOADED) ' + filename)
+          else:
+            proceed = input('Upload file ' + filename + '? (y/n)\n') == 'y'
+            if not proceed:
+              continue
+
+            new_timestamp = datetime.datetime.now().timestamp()
+            service.files().update(
+              fileId=file_id,
+              media_body=MediaFileUpload(
+                dir_path + '/files/' + filename, 
+                # 'text/plain', 
+                resumable=True
+              ),
+              modified_time=new_timestamp
+            ).execute()
+            os.utime(dir_path + "/files/" + filename, (new_timestamp, new_timestamp))
+            print('(UPLOADED) ' + filename)
   except errors.HttpError as error:
     print('An error occurred: %s' % error)
 
@@ -90,9 +169,6 @@ def load_config():
   global config
   with open(dir_path + '/config.json') as json_file:
     config = json.load(json_file)
-
-def remove_stop_words(arr):
-  pass
 
 def produce_dict_entries(key, entry, knowledge_points):
   knowledge_points[key] = entry
@@ -106,17 +182,12 @@ def produce_dict_entries(key, entry, knowledge_points):
 
 def load_knowledge_points():
   knowledge_points = {}
-  with open(dir_path + "/knowledge.yml", "r") as f:
+  with open(dir_path + "/files/knowledge.yml", "r") as f:
     content = f.read()
     entries = yaml.safe_load(content)
     for key in entries:
       e = entries[key]
       produce_dict_entries(key, e, knowledge_points)
-
-      # knowledge_points[key] = e
-      # if 'tags' in e:
-      #   for q in e['tags']:
-      #     knowledge_points[q] = e
   return knowledge_points 
 
 if __name__ == '__main__':
