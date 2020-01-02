@@ -1,5 +1,6 @@
 #!/usr/local/bin/python3
 
+import json
 import os
 from datetime import datetime
 
@@ -16,7 +17,65 @@ class FileManager():
       files[filename] = { 'timestamp': timestamp }
     return files
 
+  def get_local_metadata(self, dir_path):
+    if not os.path.isfile('metadata.json'):
+      data = { 'id': 0 }
+      with open(os.path.join(dir_path, 'metadata.json'), 'w') as f:
+        f.write(json.dumps(data, indent=2))
+
+    with open(os.path.join(dir_path, 'metadata.json'), 'r') as f:
+      data = json.loads(f.read())
+      return data
+
+  def get_remote_metadata(self, remote_folder_id):
+    metadata_file_id = '1d-uAQdrScoDjD1KKQrQj_K9_kdjrXQmy'
+    fh = self.gdrive.download_file(metadata_file_id)
+    data = fh.getvalue().decode('utf-8').strip()
+    return json.loads(data)
+
+  def update_local(self, update_local):
+
+  def update_remote(self, update_local):
+
   def sync(self, local_path, remote_folder_id):
+    local_data = self.get_local_metadata(local_path)
+    remote_data = self.get_remote_metadata(remote_folder_id)
+
+    # if no metadata locally and no metadata remotely
+    #   create metadata locally and upload
+    #
+    # if no metadata locally and metadata remotely
+    #   download from remote
+    #
+    # if no metadata remote and metadata locally
+    #   upload all to remote
+
+    # if local_data['id'] < remote_data['id']:
+    #   Update local data, discarding local changes.
+
+    # if local_data['id'] == remote_data['id']:
+    #   If any timestamps have changed.
+    #     - Update local metadata.
+    #     - Increase version.
+
+    # if local_data['id'] > remote_data['id']:
+    #   Update remote data, discarding remote changes.
+
+    # When updating.
+    #   for each file
+    #     if file does not exist in metadata, delete it
+    #     if file exists in metadata, download it
+    #     if it has smaller timestamp, download file
+    #     if it has larger timestamp, correct timestamp (error)
+
+    print(local_id)
+    print(remote_id)
+    print(local_data)
+    print(remote_data)
+    return
+
+
+
     remote_files = self.gdrive.list_files_in_folder(remote_folder_id)
     local_files = self.get_local_files(local_path)
 

@@ -51,18 +51,37 @@ class UploadLocalOnlyFiles(unittest.TestCase):
 
 class DownloadRemoteOnlyFiles(unittest.TestCase):
   def setUp(self):
-    self.remote_folder_id = wrapper.create_folder('files_test')
+    self.remote_folder_id = '1fHGO82QmZAEsKIO5kMnFXYGmOi8fyIFI'
     os.makedirs(local_folder, exist_ok=True)
+
+    # files = {
+    #   'test.txt': '1ByVvRVgfUuCxXjZFULnPwIihgKjE7bwt',
+    #   'test.png': '1ptqOISYtWcA628CqtJ2PXilX3wLxMCGX'
+    # }
 
   def tearDown(self):
     os.remove(os.path.join(local_folder, 'test.txt'))
     os.remove(os.path.join(local_folder, 'test.png'))
     os.rmdir(local_folder)
-    wrapper.delete_folder(self.remote_folder_id)
 
   def test_download_remote_files(self):
+    # Assert remote folder contains two files.
+    files = wrapper.list_files_in_folder(self.remote_folder_id)
+    self.assertEqual(0, len(files))
+
+    file_manager.sync(local_folder, self.remote_folder_id)
+
+    # Assert remote folder contains both our files.
+    files = wrapper.list_files_in_folder(self.remote_folder_id)
+    self.assertEqual(2, len(files))
+
+    filenames = [f for f in files]
+    filenames.sort()
+    self.assertEqual(['test.png', 'test.txt'], filenames)
 
 
 if __name__ == '__main__':
-  unittest.main()
+  local_folder = os.path.join(dir_path, 'files')
+  # file_manager.generate_metadata(local_folder)
+  # unittest.main()
 

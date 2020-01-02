@@ -84,10 +84,9 @@ class GdriveWrapper():
       files[f['name']] = { 'id': f['id'], 'timestamp': timestamp }
     return files
 
-  def download_file(self, file_id, path):
-    timestamp = get_file_timestamp(file_id)
-    request = self.service.files().export_media(
-        fileId=file_id, mimeType='text/plain')
+  def download_file(self, file_id):
+    # request = self.service.files().export_media(
+    request = self.service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
 
@@ -95,7 +94,8 @@ class GdriveWrapper():
     while done is False:
       _, done = downloader.next_chunk()
 
-    return fh.getbuffer()
+    # return fh.getbuffer()
+    return fh
 
   def upload_file(self, folder_id, filename, path):
     file_metadata = {
