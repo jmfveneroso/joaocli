@@ -1,0 +1,13 @@
+{
+  "id": "1",
+  "files": [
+    {
+      "name": "test.txt",
+      "modified_at": 1545730073
+    },
+    {
+      "name": "file_that_does_not_exist.txt",
+      "modified_at": 0
+    }
+  ]
+}

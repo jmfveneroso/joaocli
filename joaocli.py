@@ -58,11 +58,16 @@ if __name__ == '__main__':
   command = ' '.join(args.command)
 
   if command == 'sync':
-    wrapper = knowledge_base.GdriveWrapper(dir_path + '/credentials.json',
-                            dir_path + '/token.pickle')
-    file_manager = knowledge_base.FileManager(wrapper)
-    folder_id = '16dRHX58zL2Wh721T5q_8yZ2ulP3hq2Gm'
-    file_manager.sync(dir_path + '/files', folder_id)
+    wrapper = knowledge_base.GdriveWrapper(
+      dir_path + '/credentials.json',
+      dir_path + '/token.pickle',
+    )
+    file_manager = knowledge_base.FileSyncer(
+      wrapper,
+      os.path.join(dir_path, '/files'),
+      '16dRHX58zL2Wh721T5q_8yZ2ulP3hq2Gm',
+    )
+    file_manager.sync()
     quit()
 
   knowledge_points = load_knowledge_points()
