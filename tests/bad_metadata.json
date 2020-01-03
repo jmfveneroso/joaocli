@@ -6,8 +6,8 @@
       "modified_at": 1545730073
     },
     {
-      "name": "test.png",
-      "modified_at": 1545737000
+      "name": "file_that_does_not_exist.txt",
+      "modified_at": 0
     }
   ]
 }

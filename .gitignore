@@ -2,5 +2,6 @@ token.pickle
 credentials.json
 knowledge.yml
 config.json
-files/*
 *.pyc
+files/*
+logs/*

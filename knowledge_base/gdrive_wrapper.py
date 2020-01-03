@@ -121,10 +121,12 @@ class GdriveWrapper():
 
     return fh
 
-  def upload_file(self, folder_id, filename, path):
+  def upload_file(self, folder_id, filename, path, timestamp=0):
+    d = datetime.fromtimestamp(timestamp).astimezone(tzlocal())
     file_metadata = {
       'name': filename,
-      'parents': [folder_id]
+      'parents': [folder_id],
+      'modifiedTime': d.isoformat("T"),
     }
     media = MediaFileUpload(path, mimetype='text/plain')
     self.service.files().create(body=file_metadata, media_body=media).execute()

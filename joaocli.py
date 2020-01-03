@@ -64,7 +64,7 @@ if __name__ == '__main__':
     )
     file_manager = knowledge_base.FileSyncer(
       wrapper,
-      os.path.join(dir_path, '/files'),
+      os.path.join(dir_path, 'files'),
       '16dRHX58zL2Wh721T5q_8yZ2ulP3hq2Gm',
     )
     file_manager.sync()
