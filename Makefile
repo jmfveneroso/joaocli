@@ -2,4 +2,4 @@ init:
 	pip install -r requirements.txt
 
 test:
-	nosetests tests
+	python3 tests/file_manager_test.integration.py

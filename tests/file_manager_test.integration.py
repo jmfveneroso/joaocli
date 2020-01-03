@@ -3,7 +3,7 @@
 import json
 import os
 import unittest
-from context import knowledge_base
+from context import file_syncer
 from datetime import datetime
 from shutil import copyfile
 
@@ -12,7 +12,7 @@ root = os.path.abspath(os.path.join(dir_path, '../'))
 tests_folder = os.path.join(root, 'tests')
 local_folder = os.path.join(root, 'files_test')
 
-gdrive = knowledge_base.GdriveWrapper(
+gdrive = file_syncer.GdriveWrapper(
   root + '/credentials.json',
   root + '/token.pickle'
 )
@@ -39,7 +39,7 @@ class FileSyncerTest(unittest.TestCase):
 
     # Create remote folder.
     self.remote_folder_id = gdrive.create_folder('files_test')
-    self.file_syncer = knowledge_base.FileSyncer(
+    self.file_syncer = file_syncer.FileSyncer(
       gdrive, local_folder, self.remote_folder_id
     )
 
