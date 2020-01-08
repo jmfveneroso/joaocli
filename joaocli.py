@@ -3,15 +3,28 @@
 import argparse
 import datetime
 import file_syncer
+import glob
 import io
 import json
 import os
 import pickle
+import re
 import subprocess
 import yaml
 import os.path
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
+data_path = os.path.join(dir_path, 'files')
+
+class bcolors:
+  HEADER = '\033[95m'
+  OKBLUE = '\033[94m'
+  OKGREEN = '\033[92m'
+  WARNING = '\033[93m'
+  FAIL = '\033[91m'
+  ENDC = '\033[0m'
+  BOLD = '\033[1m'
+  UNDERLINE = '\033[4m'
 
 config = {}
 def load_config():
@@ -73,8 +86,59 @@ def log_message():
     ['vim', '+normal G$', os.path.join('files', filename)]
   )
 
-def view_log():
-  pass
+def get_log_entries(timestamp):
+  entries = []
+  current_time = None
+  with open(os.path.join(data_path, "log.%s.txt" % timestamp)) as f:
+    i, lines = 0, f.readlines()
+    while i < len(lines):
+      match = re.search("^\[\d{2}:\d{2}:\d{2}\]", lines[i])
+      if match is None:
+        i += 1
+        continue
+
+      time = match.group()
+      title = lines[i][match.span()[1]:]
+      content = []
+      i += 1
+      while i < len(lines):
+        match = re.search("^\[\d{2}:\d{2}:\d{2}\]", lines[i])
+        if not match is None:
+          i -= 1
+          break
+        content.append(lines[i].strip())
+        i += 1
+      entries.append((time, title.strip(), content))
+  return reversed(entries)
+
+def view_log(n):
+  n = 10 if n is None else n
+  n = 1000 if n == 0 else n
+  num_entries_to_print = n
+
+  match_str = os.path.join(data_path, 'log.*.txt')
+  files = glob.glob(match_str)
+  timestamps = []
+  for path in files:
+    filename = path.split('/')[-1]
+    timestamps.append(filename.split('.')[1])
+
+  dates = [datetime.datetime.strptime(ts, "%Y-%m-%d") for ts in timestamps]
+  dates.sort(reverse=True)
+  dates = [datetime.datetime.strftime(ts, "%Y-%m-%d") for ts in dates]
+
+  entries = []
+  for d in dates:
+    print(bcolors.HEADER + '=====' + d + '=====' + bcolors.ENDC)
+    for e in get_log_entries(d):
+      print(e[0], bcolors.OKGREEN + e[1] + bcolors.ENDC)
+      for l in e[2]:
+        print(l)
+      num_entries_to_print -= 1
+      if num_entries_to_print == 0:
+        break
+    if num_entries_to_print == 0:
+      break
 
 def process_knowledge_piece(q):
   knowledge_pieces = load_knowledge()
@@ -166,7 +230,7 @@ def process_query(args):
     return log_message()
 
   if query == 'view':
-    return view_log()
+    return view_log(args.n)
 
   if query == 'lint':
     # Lint knowledge files.
@@ -188,6 +252,7 @@ if __name__ == '__main__':
   parser.add_argument('--version', action='version', version='%(prog)s 0.1')
   parser.add_argument('--type', type=str, help="set the KE type")
   parser.add_argument('--text', type=str, help="set the KE text")
+  parser.add_argument('-n', type=int, help="number of entries to print")
   parser.add_argument('command', type=str, nargs='+', help='the main command')
 
   args = parser.parse_args()
