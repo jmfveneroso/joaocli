@@ -56,7 +56,7 @@ def produce_dict_entries(key, entry, knowledge_points):
 
 def load_knowledge():
   knowledge_points = {}
-  with open(dir_path + "/files/knowledge.yml", "r") as f:
+  with open(os.path,join(data_path, "knowledge.yml"), "r") as f:
     content = f.read()
     entries = yaml.safe_load(content)
     for key in entries:
@@ -68,22 +68,22 @@ def create_log_file():
   today = datetime.date.today()
   full_date = str(today)
   week_day = str(today.strftime('%A'))
-  filename = os.path.join('files', "log.%s.txt" % str(today))
+  filename = os.path.join(data_path, "log.%s.txt" % str(today))
   with open(filename, 'w') as f:
     f.write("%s (%s)\n\n" % (full_date, week_day))
 
 def log_message():
   filename = "log.%s.txt" % str(datetime.date.today())
-  if not os.path.isfile(os.path.join('files', filename)):
+  if not os.path.isfile(os.path.join(data_path, filename)):
     create_log_file()
 
-  with open(os.path.join('files', filename), 'a') as f:
+  with open(os.path.join(data_path, filename), 'a') as f:
     n = datetime.datetime.now()
     f.write("\n")
     f.write("[%s]" % n.strftime("%H:%M:%S"))
 
   subprocess.run(
-    ['vim', '+normal G$', os.path.join('files', filename)]
+    ['vim', '+normal G$', os.path.join(data_path, filename)]
   )
 
 def get_log_entries(timestamp):
@@ -129,11 +129,17 @@ def view_log(n):
 
   entries = []
   for d in dates:
-    print(bcolors.HEADER + '=====' + d + '=====' + bcolors.ENDC)
+    padding = '==================================='
+    print(bcolors.HEADER + padding + d + padding + bcolors.ENDC)
     for e in get_log_entries(d):
       print(e[0], bcolors.OKGREEN + e[1] + bcolors.ENDC)
+      is_empty = False
       for l in e[2]:
         print(l)
+        is_empty = len(l) == 0
+      if not is_empty:
+        print('')
+
       num_entries_to_print -= 1
       if num_entries_to_print == 0:
         break
@@ -202,7 +208,7 @@ def create_knowledge_piece():
       print('Invalid text.')
 
   data = None
-  with open(os.path.join(dir_path, "files/knowledge.yml"), "r") as f:
+  with open(os.path.join(data_path, "knowledge.yml"), "r") as f:
     content = f.read()
     data = yaml.safe_load(content)
     data[kp_q] = {
@@ -210,7 +216,7 @@ def create_knowledge_piece():
       'text': kp_text
     }
 
-  with open(os.path.join(dir_path, "files/knowledge.yml"), "w") as f:
+  with open(os.path.join(data_path, "knowledge.yml"), "w") as f:
     yaml.dump(data, f)
 
 def process_query(args):
