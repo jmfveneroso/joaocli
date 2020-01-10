@@ -12,6 +12,8 @@ import re
 import subprocess
 import yaml
 import os.path
+from tokenize import tokenize
+from collections import Counter
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 data_path = os.path.join(dir_path, 'files')
@@ -52,11 +54,10 @@ def produce_dict_entries(key, entry, knowledge_points):
 
   arr = key.split('-')
   knowledge_points[' '.join(arr)] = entry
-  knowledge_points[''.join(arr)] = entry
 
 def load_knowledge():
   knowledge_points = {}
-  with open(os.path,join(data_path, "knowledge.yml"), "r") as f:
+  with open(os.path.join(data_path, "knowledge.yml"), "r") as f:
     content = f.read()
     entries = yaml.safe_load(content)
     for key in entries:
@@ -111,11 +112,7 @@ def get_log_entries(timestamp):
       entries.append((time, title.strip(), content))
   return reversed(entries)
 
-def view_log(n):
-  n = 10 if n is None else n
-  n = 1000 if n == 0 else n
-  num_entries_to_print = n
-
+def get_logs():
   match_str = os.path.join(data_path, 'log.*.txt')
   files = glob.glob(match_str)
   timestamps = []
@@ -129,20 +126,37 @@ def view_log(n):
 
   entries = []
   for d in dates:
-    padding = '==================================='
-    print(bcolors.HEADER + padding + d + padding + bcolors.ENDC)
     for e in get_log_entries(d):
-      print(e[0], bcolors.OKGREEN + e[1] + bcolors.ENDC)
-      is_empty = False
-      for l in e[2]:
-        print(l)
-        is_empty = len(l) == 0
-      if not is_empty:
-        print('')
+      entries.append({
+        'date': d,
+        'time': e[0],
+        'title': e[1],
+        'text': e[2]
+      })
+  return entries
 
-      num_entries_to_print -= 1
-      if num_entries_to_print == 0:
-        break
+def view_log(n):
+  n = 10 if n is None else n
+  n = 1000 if n == 0 else n
+  num_entries_to_print = n
+
+  entries = get_logs()
+  cur_date = None
+  for e in entries:
+    if cur_date != e['date']:
+      cur_date = e['date']
+      padding = '==================================='
+      print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+
+    print(e['time'], bcolors.OKGREEN + e['title'] + bcolors.ENDC)
+    is_empty = False
+    for l in e['text']:
+      print(l)
+      is_empty = len(l) == 0
+    if not is_empty:
+      print('')
+
+    num_entries_to_print -= 1
     if num_entries_to_print == 0:
       break
 
@@ -219,6 +233,23 @@ def create_knowledge_piece():
   with open(os.path.join(data_path, "knowledge.yml"), "w") as f:
     yaml.dump(data, f)
 
+def vocab():
+  words = []
+  kps = load_knowledge()
+  for key in kps:
+    words += key.split()
+    words += kps[key]['text'].split()
+
+  for e in get_logs():
+    words += e['title'].split()
+    for l in e['text']:
+      words += l.split()
+
+  with open(os.path.join(data_path, 'vocab.txt'), 'w') as f:
+    counter = Counter(words)
+    for w in counter.most_common():
+      f.write(w[0] + ' ' + str(w[1]) + '\n')
+
 def process_query(args):
   query = ' '.join(args.command)
 
@@ -245,6 +276,9 @@ def process_query(args):
   if query == 'diff':
     # Show differences between data folders.
     return
+    
+  if query == 'vocab':
+    return vocab()
 
   process_knowledge_piece(query)
 
@@ -263,4 +297,3 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
   process_query(args)
-
