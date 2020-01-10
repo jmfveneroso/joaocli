@@ -6,6 +6,7 @@ import file_syncer
 import glob
 import io
 import json
+import math
 import os
 import pickle
 import re
@@ -163,8 +164,7 @@ def view_log(n):
 def process_knowledge_piece(q):
   knowledge_pieces = load_knowledge()
   if not q in knowledge_pieces:
-    print('Not found')
-    return
+    return False
 
   kp = knowledge_pieces[q]
   kp_type = kp['type'] if 'type' in kp else 'text'
@@ -183,10 +183,11 @@ def process_knowledge_piece(q):
     return
 
   if kp_type == 'bash':
-    subprocess.run(q['text'].split())
+    subprocess.run(kp['text'].split())
     return
 
   print(kp['text'])
+  return True
 
 def create_knowledge_piece():
   # text: "%s/,/\r/g" replaces "," with NL
@@ -233,22 +234,76 @@ def create_knowledge_piece():
   with open(os.path.join(data_path, "knowledge.yml"), "w") as f:
     yaml.dump(data, f)
 
+def tknize(s):
+  tkns = re.compile("\s+|[:=(),.']").split(s)
+  return [t for t in tkns if len(t) > 0]
+
 def vocab():
   words = []
   kps = load_knowledge()
   for key in kps:
-    words += key.split()
-    words += kps[key]['text'].split()
+    words += tknize(key)
+    words += tknize(kps[key]['text'])
 
   for e in get_logs():
-    words += e['title'].split()
+    words += tknize(e['title'])
     for l in e['text']:
-      words += l.split()
+      words += tknize(l)
+  words = [w.lower() for w in words]
 
   with open(os.path.join(data_path, 'vocab.txt'), 'w') as f:
     counter = Counter(words)
     for w in counter.most_common():
       f.write(w[0] + ' ' + str(w[1]) + '\n')
+
+def load_vocab():
+  v = {}
+  with open(os.path.join(data_path, 'vocab.txt'), 'r') as f:
+    for line in f:
+      arr = line.split()
+      v[arr[0]] = int(arr[1])
+  return v
+
+def print_log_entry(e, score=0.0):
+  padding = '==================================='
+  print(bcolors.OKBLUE + str(score) + bcolors.ENDC)
+  print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+
+  print(e['time'], bcolors.OKGREEN + e['title'] + bcolors.ENDC)
+  is_empty = False
+  for l in e['text']:
+    print(l)
+    is_empty = len(l) == 0
+  if not is_empty:
+    print('')
+
+def search(q):
+  v = load_vocab()
+  tkns = tknize(q)
+  tkn_set = { t.lower() for t in tkns }
+
+  scored_entries = []
+  for e in get_logs():
+    words = tknize(e['title'])
+    for l in e['text']:
+      words += tknize(l)
+    words = [w.lower() for w in words]
+
+    score = 0
+    norm = 0
+    for w in words:
+      if w in v:
+        if w in tkn_set:
+          score += (1.0 / v[w]) ** 2
+        norm += (1.0 / v[w]) ** 2
+    if norm > 0.0:
+      score /= math.sqrt(norm)
+    scored_entries.append([score, e])
+
+  scored_entries = [e for e in scored_entries if e[0] > 0.0]
+  scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
+  for e in scored_entries:
+    print_log_entry(e[1], e[0])
 
 def process_query(args):
   query = ' '.join(args.command)
@@ -276,11 +331,12 @@ def process_query(args):
   if query == 'diff':
     # Show differences between data folders.
     return
-    
+
   if query == 'vocab':
     return vocab()
 
-  process_knowledge_piece(query)
+  if not process_knowledge_piece(query):
+    search(query)
 
 if __name__ == '__main__':
   load_config()
