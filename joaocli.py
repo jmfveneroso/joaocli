@@ -277,10 +277,51 @@ def print_log_entry(e, score=0.0):
   if not is_empty:
     print('')
 
+#     g r e a t
+#   0 1 2 3 4 5
+# g 1 0 1 2 3 4
+# r 2 1 0 1 2 3
+# a 3 2 1 1 1 2
+# d 4 3 2 2 2 2
+# e 5 4 3 3 3 3
+def get_levenshtein_distance(w1, w2):
+  memo = [i for i in range(len(w1) + 1)]
+  memo2 = [0 for _ in range(len(w1) + 1)]
+
+  for j in range(len(w2)):
+    memo2[0] = j
+    for i in range(len(w1)):
+      min_val = memo[i] + (0 if w1[i] == w2[j] else 1)
+      min_val = min(min_val, memo[i+1] + 1)
+      min_val = min(min_val, memo2[i] + 1)
+      memo2[i+1] = min_val
+    memo = memo2.copy()
+  return memo[len(w1)]
+
+def get_closest_word(w, vocab):
+  if w in vocab:
+    return w
+
+  min_word = None
+  min_distance = 100
+  for w2 in vocab:
+    if abs(len(w2) - len(w)) > min_distance:
+      continue
+
+    dis = get_levenshtein_distance(w, w2)
+    if dis < min_distance:
+      min_distance = dis
+      min_word = w2
+
+  return min_word
+
 def search(q):
   v = load_vocab()
   tkns = tknize(q)
+  tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
+
+  print('Results for query:', ' '.join(tkns))
 
   scored_entries = []
   for e in get_logs():
