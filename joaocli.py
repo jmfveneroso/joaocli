@@ -11,6 +11,7 @@ import os
 import pickle
 import re
 import subprocess
+import tempfile
 import yaml
 import os.path
 from tokenize import tokenize
@@ -79,38 +80,57 @@ def log_message():
   if not os.path.isfile(os.path.join(data_path, filename)):
     create_log_file()
 
+  current_id = None
+  with open(os.path.join(data_path, 'id.txt'), 'r') as f:
+    current_id = int(f.read().strip())
+  with open(os.path.join(data_path, 'id.txt'), 'w') as f:
+    f.write(str(int(current_id) + 1))
+
   with open(os.path.join(data_path, filename), 'a') as f:
     n = datetime.datetime.now()
     f.write("\n")
-    f.write("[%s]" % n.strftime("%H:%M:%S"))
+    f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
 
   subprocess.run(
     ['vim', '+normal G$', os.path.join(data_path, filename)]
   )
 
 def get_log_entries(timestamp):
+  pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
   entries = []
   current_time = None
   with open(os.path.join(data_path, "log.%s.txt" % timestamp)) as f:
     i, lines = 0, f.readlines()
     while i < len(lines):
-      match = re.search("^\[\d{2}:\d{2}:\d{2}\]", lines[i])
+      match = re.search(pattern, lines[i])
       if match is None:
         i += 1
         continue
 
-      time = match.group()
-      title = lines[i][match.span()[1]:]
+      entry_id = match.group(1)
+      time = match.group(2)
+
+      s = lines[i][match.span()[1]:].strip()
+
+      tags = []
+      match = re.search("^\([^)]+\)", s)
+      if not match is None:
+        tags = match.group()[1:-1].lower().split(',')
+        tags = [t.strip() for t in tags]
+        title = s[match.span()[1]:]
+      else:
+        title = s
+
       content = []
       i += 1
       while i < len(lines):
-        match = re.search("^\[\d{2}:\d{2}:\d{2}\]", lines[i])
+        match = re.search(pattern, lines[i])
         if not match is None:
           i -= 1
           break
         content.append(lines[i].strip())
         i += 1
-      entries.append((time, title.strip(), content))
+      entries.append((time, title.strip(), content, entry_id, tags))
   return reversed(entries)
 
 def get_logs():
@@ -132,9 +152,18 @@ def get_logs():
         'date': d,
         'time': e[0],
         'title': e[1],
-        'text': e[2]
+        'text': e[2],
+        'id': e[3],
+        'tags': e[4],
       })
   return entries
+
+def view_titles():
+  entries = get_logs()
+  for e in entries:
+    s = e['date'] + ' ' + e['time'][1:-1]
+    dt = datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
+    print(dt)
 
 def view_log(n):
   n = 10 if n is None else n
@@ -144,18 +173,25 @@ def view_log(n):
   entries = get_logs()
   cur_date = None
   for e in entries:
-    if cur_date != e['date']:
-      cur_date = e['date']
-      padding = '==================================='
-      print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+    print_log_entry(e, print_date=(cur_date != e['date']))
+    cur_date = e['date']
 
-    print(e['time'], bcolors.OKGREEN + e['title'] + bcolors.ENDC)
-    is_empty = False
-    for l in e['text']:
-      print(l)
-      is_empty = len(l) == 0
-    if not is_empty:
-      print('')
+    # if cur_date != e['date']:
+    #   cur_date = e['date']
+    #   padding = '==================================='
+    #   print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+
+    # print(
+    #   bcolors.UNDERLINE + e['id'] + bcolors.ENDC,
+    #   e['time'],
+    #   bcolors.OKGREEN + e['title'] + bcolors.ENDC
+    # )
+    # is_empty = False
+    # for l in e['text']:
+    #   print(l)
+    #   is_empty = len(l) == 0
+    # if not is_empty:
+    #   print('')
 
     num_entries_to_print -= 1
     if num_entries_to_print == 0:
@@ -264,12 +300,23 @@ def load_vocab():
       v[arr[0]] = int(arr[1])
   return v
 
-def print_log_entry(e, score=0.0):
+def print_log_entry(e, score=0.0, print_date=True):
   padding = '==================================='
-  print(bcolors.OKBLUE + str(score) + bcolors.ENDC)
-  print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+  if score > 0:
+    print(bcolors.OKBLUE + str(score) + bcolors.ENDC)
 
-  print(e['time'], bcolors.OKGREEN + e['title'] + bcolors.ENDC)
+  if print_date:
+    print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+
+  print(
+    bcolors.UNDERLINE + e['id'] + bcolors.ENDC,
+    e['time'],
+    bcolors.OKGREEN + e['title'] + bcolors.ENDC
+  )
+
+  if len(e['tags']) > 0:
+    print(bcolors.OKBLUE + ' '.join(e['tags']) + bcolors.ENDC)
+
   is_empty = False
   for l in e['text']:
     print(l)
@@ -277,13 +324,6 @@ def print_log_entry(e, score=0.0):
   if not is_empty:
     print('')
 
-#     g r e a t
-#   0 1 2 3 4 5
-# g 1 0 1 2 3 4
-# r 2 1 0 1 2 3
-# a 3 2 1 1 1 2
-# d 4 3 2 2 2 2
-# e 5 4 3 3 3 3
 def get_levenshtein_distance(w1, w2):
   memo = [i for i in range(len(w1) + 1)]
   memo2 = [0 for _ in range(len(w1) + 1)]
@@ -315,9 +355,20 @@ def get_closest_word(w, vocab):
 
   return min_word
 
+def search_tag(tag):
+  entries = []
+  for e in get_logs():
+    if tag in e['tags']:
+      print_log_entry(e)
+
 def search(q):
   v = load_vocab()
   tkns = tknize(q)
+
+  tags = get_tags()
+  if len(tkns) == 1 and tkns[0] in tags:
+    return search_tag(tkns[0])
+
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
 
@@ -346,6 +397,95 @@ def search(q):
   for e in scored_entries:
     print_log_entry(e[1], e[0])
 
+def replace_log_message(title_or_id):
+  log_entry = None
+  for e in get_logs():
+    try:
+      if int(e['id']) == int(title_or_id):
+        log_entry = e
+        break
+    except ValueError:
+      pass
+
+    if e['title'] == title_or_id:
+      log_entry = e
+      break
+
+  with open(os.path.join(data_path, "log.%s.txt" % e['date']), 'r') as f:
+    lines = [l for l in f]
+
+  # Delete entry.
+  with open(os.path.join(data_path, "log.%s.txt" % e['date']), 'w') as f:
+    write = True
+    pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
+    for l in lines:
+      match = re.search(pattern, l)
+      if match:
+        if not write:
+          write = True
+
+        entry_id = match.group(1)
+        if entry_id == log_entry['id']:
+          write = False
+      if write:
+        f.write(l)
+
+  # Create new entry.
+  filename = "log.%s.txt" % str(datetime.date.today())
+  if not os.path.isfile(os.path.join(data_path, filename)):
+    create_log_file()
+
+  current_id = None
+  with open(os.path.join(data_path, 'id.txt'), 'r') as f:
+    current_id = int(f.read().strip())
+  with open(os.path.join(data_path, 'id.txt'), 'w') as f:
+    f.write(str(int(current_id) + 1))
+
+  with open(os.path.join(data_path, filename), 'a') as f:
+    n = datetime.datetime.now()
+    f.write("\n")
+    f.write(
+      "{:08d} ".format(current_id) + "[%s] " % n.strftime("%H:%M:%S") +
+      log_entry['title'] + "\n"
+    )
+
+    f.write("+change: %s %s\n" % (log_entry['date'], log_entry['time']))
+    for l in log_entry['text']:
+      f.write("%s\n" % l)
+
+  subprocess.run(
+    ['vim', '+normal G$', os.path.join(data_path, filename)]
+  )
+
+def get_tags():
+  tags = set()
+  entries = get_logs()
+  for e in entries:
+    for t in e['tags']:
+      tags.add(t)
+  return tags
+
+def tags():
+  tags = {}
+  entries = get_logs()
+  for e in entries:
+    for t in e['tags']:
+      dt = datetime.datetime.strptime(
+        "%s %s" % (e['date'], e['time'][1:-1]), '%Y-%m-%d %H:%M:%S'
+      )
+
+      if not t in tags:
+        tags[t] = (dt, 0)
+      elif dt > tags[t][0]:
+        tags[t] = (dt, tags[t][1])
+      tags[t] = (tags[t][0], tags[t][1] + 1)
+
+  tags = [(t, tags[t][0], tags[t][1]) for t in tags]
+  sorted_tags = sorted(tags, key=lambda e : e[1], reverse=True)
+  for t in sorted_tags:
+    dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
+    print("%s (%d): %s" % (t[0], t[2], dt))
+
 def process_query(args):
   query = ' '.join(args.command)
 
@@ -358,12 +498,20 @@ def process_query(args):
     # add_type = args.type
     return create_knowledge_piece()
 
-  if query == 'log':
+  if args.command[0] == 'replace':
+    if len(args.command) < 2:
+      return
+    return replace_log_message(args.command[1])
+
+  if args.command[0] == 'log':
     # Log a message in the current open log file.
     return log_message()
 
   if query == 'view':
     return view_log(args.n)
+
+  if query == 'titles':
+    return view_titles()
 
   if query == 'lint':
     # Lint knowledge files.
@@ -375,6 +523,9 @@ def process_query(args):
 
   if query == 'vocab':
     return vocab()
+
+  if query == 'tags':
+    return tags()
 
   if not process_knowledge_piece(query):
     search(query)
