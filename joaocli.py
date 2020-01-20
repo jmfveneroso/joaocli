@@ -158,12 +158,20 @@ def get_logs():
       })
   return entries
 
-def view_titles():
+def get_titles():
+  titles = {}
   entries = get_logs()
   for e in entries:
+    titles[e['title']] = e
+  return titles
+
+def view_titles():
+  titles = get_titles()
+  for t in titles:
+    e = titles[t]
     s = e['date'] + ' ' + e['time'][1:-1]
     dt = datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
-    print(dt)
+    print(e['id'], s, t)
 
 def view_log(n):
   n = 10 if n is None else n
@@ -369,6 +377,10 @@ def search(q):
   if len(tkns) == 1 and tkns[0] in tags:
     return search_tag(tkns[0])
 
+  titles = get_titles()
+  if len(tkns) == 1 and tkns[0] in titles:
+    return print_log_entry(titles[tkns[0]], 0.0)
+
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
 
@@ -410,6 +422,10 @@ def replace_log_message(title_or_id):
     if e['title'] == title_or_id:
       log_entry = e
       break
+
+  if log_entry is None:
+    print('Couldn\'t find this entry')
+    return
 
   with open(os.path.join(data_path, "log.%s.txt" % e['date']), 'r') as f:
     lines = [l for l in f]
