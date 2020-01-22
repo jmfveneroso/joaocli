@@ -12,10 +12,13 @@ root = os.path.abspath(os.path.join(dir_path, '../'))
 tests_folder = os.path.join(root, 'tests')
 local_folder = os.path.join(root, 'files_test')
 
-gdrive = file_syncer.GdriveWrapper(
-  root + '/credentials.json',
-  root + '/token.pickle'
-)
+# storage = file_syncer.GdriveWrapper(
+#   root + '/credentials.json',
+#   root + '/token.pickle'
+# )
+
+storage = file_syncer.S3Wrapper('files_test')
+
 class FileSyncerTest(unittest.TestCase):
   def copy_file_to_local(self, filename, new_filename=None):
     if new_filename is None:
@@ -28,7 +31,7 @@ class FileSyncerTest(unittest.TestCase):
   def copy_file_to_remote(self, filename, new_filename=None):
     if new_filename is None:
       new_filename = filename
-    gdrive.upload_file(
+    storage.upload_file(
       self.remote_folder_id, new_filename,
       os.path.join(tests_folder, filename)
     )
@@ -38,9 +41,9 @@ class FileSyncerTest(unittest.TestCase):
     os.makedirs(local_folder, exist_ok=True)
 
     # Create remote folder.
-    self.remote_folder_id = gdrive.create_folder('files_test')
+    self.remote_folder_id = storage.create_folder('files_test')
     self.file_syncer = file_syncer.FileSyncer(
-      gdrive, local_folder, self.remote_folder_id
+      storage, local_folder, self.remote_folder_id
     )
 
   def tearDown(self):
@@ -50,28 +53,45 @@ class FileSyncerTest(unittest.TestCase):
     os.rmdir(local_folder)
 
     # Remove remote folder.
-    gdrive.delete_folder(self.remote_folder_id)
+    storage.delete_folder(self.remote_folder_id)
+
+  def test_ensure_empty_remote_consistency(self):
+    self.copy_file_to_remote("test.txt")
+    self.file_syncer.ensure_remote_consistency()
+
+    files = storage.list_files_in_folder(self.remote_folder_id)
+    self.assertEqual(0, len(files))
+
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
+    self.assertTrue(fh) # Not None.
+    data = fh.getvalue().decode('utf-8').strip()
+
+    actual = json.loads(data)
+    expected = { 'id': 0, 'files': [] }
+    actual = json.dumps(actual, indent=2)
+    expected = json.dumps(expected, indent=2)
+    self.assertEqual(expected, actual)
 
   def test_ensure_remote_consistency(self):
     self.copy_file_to_remote("test.txt")
     self.copy_file_to_remote("test.png")
     self.copy_file_to_remote("bad_metadata.json", "metadata.json")
 
-    files = gdrive.list_files_in_folder(self.remote_folder_id)
+    files = storage.list_files_in_folder(self.remote_folder_id)
     self.assertEqual(2, len(files))
 
     self.file_syncer.ensure_remote_consistency()
 
     # Metadata.json only lists "test.txt". File "test.png" should have been
     # deleted.
-    files = gdrive.list_files_in_folder(self.remote_folder_id)
+    files = storage.list_files_in_folder(self.remote_folder_id)
     self.assertEqual(1, len(files))
 
     # Metadata.json lists "test.txt" with timestamp "1234".
     self.assertTrue('test.txt' in files)
     self.assertEqual(1545730073, files['test.txt']['timestamp'])
 
-    fh = gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
     data = fh.getvalue().decode('utf-8').strip()
 
@@ -99,7 +119,7 @@ class FileSyncerTest(unittest.TestCase):
     self.assertEqual('test.txt', local_metadata['files'][0]['name'])
 
     # Assert remote metadata.json is as expected.
-    fh = gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
 
     local_metadata = json.dumps(local_metadata, indent=2)
@@ -110,7 +130,7 @@ class FileSyncerTest(unittest.TestCase):
     self.assertTrue(os.path.exists(os.path.join(local_folder, 'test.txt')))
 
     # Assert remote test.txt is as expected.
-    fh = gdrive.get_file_in_folder('test.txt', self.remote_folder_id)
+    fh = storage.get_file_in_folder('test.txt', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
 
   def test_no_local_metadata(self):
@@ -151,7 +171,7 @@ class FileSyncerTest(unittest.TestCase):
     files = self.file_syncer.sync()
 
     # File "test2.txt" should have been deleted.
-    files = gdrive.list_files_in_folder(self.remote_folder_id)
+    files = storage.list_files_in_folder(self.remote_folder_id)
     self.assertEqual(2, len(files))
 
     # Assert both files exist remotely.
@@ -165,7 +185,7 @@ class FileSyncerTest(unittest.TestCase):
     self.assertEqual(local_files['test.png']['timestamp'],
                      files['test.png']['timestamp'])
 
-    fh = gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
     data = fh.getvalue().decode('utf-8').strip()
 
@@ -201,7 +221,7 @@ class FileSyncerTest(unittest.TestCase):
     self.assertEqual(1545730073, files['test.txt']['timestamp'])
     self.assertEqual(1545737000, files['test.png']['timestamp'])
 
-    fh = gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
     data = fh.getvalue().decode('utf-8').strip()
     expected = json.loads(data)
@@ -232,7 +252,7 @@ class FileSyncerTest(unittest.TestCase):
     self.assertTrue('test.png' in files)
     self.assertTrue('test2.txt' in files)
 
-    fh = gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     self.assertTrue(fh) # Not None.
     data = fh.getvalue().decode('utf-8').strip()
     remote_metadata = json.loads(data)
@@ -250,4 +270,3 @@ class FileSyncerTest(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
-

@@ -108,9 +108,7 @@ class GdriveWrapper():
     file_id = self.get_file_id(filename, folder_id)
     if file_id is None:
       return None
-    return self.download_file(file_id)
 
-  def download_file(self, file_id):
     request = self.service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)

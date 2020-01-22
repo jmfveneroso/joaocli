@@ -37,14 +37,15 @@ def load_config():
     config = json.load(json_file)
 
 def sync():
-  gdrive = file_syncer.GdriveWrapper(
-    dir_path + '/credentials.json',
-    dir_path + '/token.pickle',
-  )
+  # storage = file_syncer.GdriveWrapper(
+  #   dir_path + '/credentials.json',
+  #   dir_path + '/token.pickle',
+  # )
+  storage = file_syncer.S3Wrapper('joaocli')
   fsyncer = file_syncer.FileSyncer(
-    gdrive,
+    storage,
     os.path.join(dir_path, 'files'),
-    '16dRHX58zL2Wh721T5q_8yZ2ulP3hq2Gm',
+    'joaocli',
   )
   fsyncer.sync()
 

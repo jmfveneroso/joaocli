@@ -6,8 +6,8 @@ import tempfile
 from datetime import datetime
 
 class FileSyncer():
-  def __init__(self, gdrive_wrapper, dir_path, remote_folder_id):
-    self.gdrive = gdrive_wrapper
+  def __init__(self, storage, dir_path, remote_folder_id):
+    self.storage = storage
     self.dir_path = dir_path
     self.remote_folder_id = remote_folder_id
 
@@ -28,7 +28,7 @@ class FileSyncer():
       return json.loads(f.read())
 
   def get_remote_metadata(self):
-    fh = self.gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = self.storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     if fh is None:
       return None
     data = fh.getvalue().decode('utf-8').strip()
@@ -36,7 +36,7 @@ class FileSyncer():
 
   def ensure_remote_consistency(self):
     remote_metadata = self.get_remote_metadata()
-    files = self.gdrive.list_files_in_folder(self.remote_folder_id)
+    files = self.storage.list_files_in_folder(self.remote_folder_id)
 
     metadata_files = {}
     if not remote_metadata is None:
@@ -50,7 +50,7 @@ class FileSyncer():
     # Discard files that are not listed in the metadata.
     unidentified_files = { f for f in files if not f in metadata_files }
     for filename in unidentified_files:
-      self.gdrive.delete_file(files[filename]['id'])
+      self.storage.delete_file(files[filename]['id'])
       del files[filename]
       update_metadata = True
 
@@ -60,13 +60,13 @@ class FileSyncer():
       timestamp = files[filename]['timestamp']
       metadata_timestamp = metadata_files[filename]['timestamp']
       if timestamp != metadata_timestamp:
-        self.gdrive.update_file_timestamp(
+        self.storage.update_file_timestamp(
           files[filename]['id'], metadata_timestamp)
 
     if not update_metadata:
       return
 
-    files = self.gdrive.list_files_in_folder(self.remote_folder_id)
+    files = self.storage.list_files_in_folder(self.remote_folder_id)
     remote_metadata_id = 0
     if not remote_metadata is None:
       remote_metadata_id = remote_metadata['id']
@@ -83,11 +83,11 @@ class FileSyncer():
     temp.write(bytes(data, 'utf-8'))
     temp.seek(0)
 
-    file_id = self.gdrive.get_file_id('metadata.json', self.remote_folder_id)
+    file_id = self.storage.get_file_id('metadata.json', self.remote_folder_id)
     if file_id is None:
-      self.gdrive.upload_file(self.remote_folder_id, 'metadata.json', temp.name)
+      self.storage.upload_file(self.remote_folder_id, 'metadata.json', temp.name)
     else:
-      self.gdrive.update_file(file_id, temp.name, 0)
+      self.storage.update_file(file_id, temp.name, 0)
     temp.close()
 
   def update_local_metadata(self):
@@ -155,7 +155,7 @@ class FileSyncer():
 
       if download_file:
         update_metadata = True
-        fh = self.gdrive.get_file_in_folder(f['name'], self.remote_folder_id)
+        fh = self.storage.get_file_in_folder(f['name'], self.remote_folder_id)
         if fh is None:
           return None # Error
 
@@ -169,25 +169,25 @@ class FileSyncer():
       if not f in remote_files:
         os.remove(os.path.join(self.dir_path, f))
 
-    fh = self.gdrive.get_file_in_folder('metadata.json', self.remote_folder_id)
+    fh = self.storage.get_file_in_folder('metadata.json', self.remote_folder_id)
     with open(os.path.join(self.dir_path, 'metadata.json'), "wb") as f:
       f.write(fh.getbuffer())
 
   def sync_remote_based_on_local(self):
     local_metadata = self.update_local_metadata()
-    remote_files = self.gdrive.list_files_in_folder(self.remote_folder_id)
+    remote_files = self.storage.list_files_in_folder(self.remote_folder_id)
 
     for f in local_metadata['files']:
       filename = f['name']
       if filename in remote_files:
         if remote_files[filename]['timestamp'] == f['modified_at']:
           continue
-        self.gdrive.update_file(
+        self.storage.update_file(
           remote_files[filename]['id'], os.path.join(self.dir_path, filename),
           f['modified_at']
         )
       else:
-        self.gdrive.upload_file(
+        self.storage.upload_file(
           self.remote_folder_id, filename,
           os.path.join(self.dir_path, filename), f['modified_at']
         )
@@ -196,16 +196,16 @@ class FileSyncer():
     for f in remote_files:
       if f in local_files:
         continue
-      self.gdrive.delete_file(remote_files[f]['id'])
+      self.storage.delete_file(remote_files[f]['id'])
 
-    file_id = self.gdrive.get_file_id('metadata.json', self.remote_folder_id)
+    file_id = self.storage.get_file_id('metadata.json', self.remote_folder_id)
     if file_id is None:
-      self.gdrive.upload_file(
+      self.storage.upload_file(
         self.remote_folder_id, 'metadata.json',
         os.path.join(self.dir_path, 'metadata.json')
       )
     else:
-      self.gdrive.update_file(
+      self.storage.update_file(
         file_id, os.path.join(self.dir_path, 'metadata.json'), 0
       )
 
@@ -224,7 +224,7 @@ class FileSyncer():
       return self.sync_local_based_on_remote()
 
     if remote_metadata is None:
-      return # Error. Should be impossible due to ensure_remote_consistency.
+      return self.sync_remote_based_on_local()
 
     local_id = int(local_metadata['id'])
     remote_id = int(remote_metadata['id'])
