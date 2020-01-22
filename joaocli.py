@@ -36,7 +36,7 @@ def load_config():
   with open(dir_path + '/config.json') as json_file:
     config = json.load(json_file)
 
-def sync():
+def sync(dry_run):
   # storage = file_syncer.GdriveWrapper(
   #   dir_path + '/credentials.json',
   #   dir_path + '/token.pickle',
@@ -47,7 +47,7 @@ def sync():
     os.path.join(dir_path, 'files'),
     'joaocli',
   )
-  fsyncer.sync()
+  fsyncer.sync(dry_run=dry_run)
 
 def produce_dict_entries(key, entry, knowledge_points):
   knowledge_points[key] = entry
@@ -507,7 +507,7 @@ def process_query(args):
   query = ' '.join(args.command)
 
   if query == 'sync':
-    return sync()
+    return sync(dry_run=bool(args.dry_run))
 
   # Create a knowledge piece.
   if query == 'add' or query == 'create':
@@ -557,6 +557,7 @@ if __name__ == '__main__':
   parser.add_argument('--version', action='version', version='%(prog)s 0.1')
   parser.add_argument('--type', type=str, help="set the KE type")
   parser.add_argument('--text', type=str, help="set the KE text")
+  parser.add_argument('-d', '--dry-run', action='store_true')
   parser.add_argument('-n', type=int, help="number of entries to print")
   parser.add_argument('command', type=str, nargs='+', help='the main command')
 
