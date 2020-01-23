@@ -10,7 +10,7 @@ from datetime import datetime
 from dateutil.tz import *
 
 logging.config.fileConfig(os.path.abspath(os.path.join(os.path.dirname(__file__), '../logging.conf')))
-logger = logging.getLogger('joaocli')
+logger = logging.getLogger('joaocli_default')
 
 def pretty_date(timestamp):
   d = datetime.fromtimestamp(timestamp)
@@ -282,9 +282,15 @@ class FileSyncer():
         )
       logger.info('Updated remote metadata.json.')
 
-  def sync(self, dry_run=True):
+  def sync(self, dry_run=True, verbose=False):
+    global logger
+    verbose = verbose or dry_run
+    if verbose or dry_run:
+      logger = logging.getLogger('joaocli_verbose')
+
     logger.info(
       'Syncing local %s and remote %s' % (self.dir_path, self.remote_folder_id))
+
     if dry_run:
       logger.info('Dry run')
 
@@ -328,6 +334,6 @@ class FileSyncer():
       return self.sync_local_based_on_remote(dry_run)
 
     local_metadata = self.update_local_metadata(dry_run)
-    if local_metadata['id'] > local_id:
+    if int(local_metadata['id']) > local_id:
       logger.info('Pushing untracked changes to remote')
       self.sync_remote_based_on_local(dry_run)
