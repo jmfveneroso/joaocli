@@ -544,6 +544,16 @@ def process_query(args):
   if query == 'tags':
     return tags()
 
+  if query == 'checkpoint':
+    titles = get_titles()
+    if 'Checkpoint' in titles:
+      entry = titles['Checkpoint']
+      text = ' ' .join(entry['text']).strip()
+      checkpoint_date = datetime.datetime.strptime(text, '%Y-%m-%d')
+      days_to_checkpoint = abs(checkpoint_date - datetime.datetime.now()).days
+      print('%d days remaining to the next checkpoint' % days_to_checkpoint)
+    return
+
   if not process_knowledge_piece(query):
     search(query)
 
