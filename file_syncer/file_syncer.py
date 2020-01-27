@@ -185,7 +185,11 @@ class FileSyncer():
     if remote_metadata is None:
       return # Error
 
+    local_files = {}
     local_metadata = self.get_local_metadata()
+    if not local_metadata is None:
+      local_files = {f['name']: f['modified_at'] for f in local_metadata['files']}
+
     for f in remote_metadata['files']:
       filename = f['name']
       timestamp = f['modified_at']
@@ -193,16 +197,17 @@ class FileSyncer():
       download_file = False
       if local_metadata is None:
         download_file = True
-        logger.info('Remote file %s does not exist locally' % f)
-      elif not f['name'] in local_metadata['files']:
+        logger.info('Remote file %s does not exist locally' % filename)
+      elif not f['name'] in local_files:
         download_file = True
-        logger.info('Remote file %s does not exist locally' % f)
+        logger.info('Remote file %s does not exist locally' % filename)
       else:
-        local_file = local_metadata['files'][filename]
-        if local_file['modified_at'] != f['modified_at']:
+        local_timestamp = local_files[filename]
+        if local_timestamp != f['modified_at']:
           download_file = True
         logger.info('File %s has local timestamp %s and remote timestamp %s' % (
-          pretty_date(local_file['modified_at']),
+          filename,
+          pretty_date(local_timestamp),
           pretty_date(f['modified_at'])))
 
       if download_file:
@@ -284,17 +289,19 @@ class FileSyncer():
 
   def sync(self, dry_run=True, verbose=False):
     global logger
-    verbose = verbose or dry_run
+    # verbose = verbose or dry_run
+    verbose = True
     if verbose or dry_run:
       logger = logging.getLogger('joaocli_verbose')
 
     logger.info(
-      'Syncing local %s and remote %s' % (self.dir_path, self.remote_folder_id))
+      'Syncing local %s and remote %s' %
+      (self.dir_path, self.remote_folder_id))
 
     if dry_run:
       logger.info('Dry run')
 
-    self.ensure_remote_consistency(dry_run)
+    # self.ensure_remote_consistency(dry_run)
     local_metadata = self.get_local_metadata()
     remote_metadata = self.get_remote_metadata()
 

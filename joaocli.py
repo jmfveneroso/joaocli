@@ -45,7 +45,8 @@ def sync(dry_run, verbose):
   fsyncer = file_syncer.FileSyncer(
     storage,
     os.path.join(dir_path, 'files'),
-    'joaocli',
+    # 'joaocli',
+    'public',
   )
   fsyncer.sync(dry_run=dry_run, verbose=verbose)
 
