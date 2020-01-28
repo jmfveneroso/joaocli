@@ -13,14 +13,14 @@ logging.config.fileConfig(os.path.abspath(os.path.join(os.path.dirname(__file__)
 logger = logging.getLogger('joaocli_default')
 
 def pretty_date(timestamp):
-  d = datetime.fromtimestamp(timestamp)
+  d = datetime.fromtimestamp(int(timestamp))
   return d.strftime('%Y-%m-%d %H:%M:%S')
 
 class FileSyncer():
-  def __init__(self, storage, dir_path, remote_folder_id):
+  def __init__(self, storage, dir_path):
     self.storage = storage
     self.dir_path = dir_path
-    self.remote_folder_id = remote_folder_id
+    self.remote_folder_id = storage.folder_id
 
   def get_local_files(self):
     files = {}
@@ -121,7 +121,7 @@ class FileSyncer():
     if not local_metadata is None:
       local_metadata_id = local_metadata['id']
 
-    metadata_files = None
+    metadata_files = {}
     update_metadata = False
     files = self.get_local_files()
     if local_metadata is None:
@@ -233,6 +233,7 @@ class FileSyncer():
 
     if not dry_run:
       fh = self.storage.get_file_in_folder('metadata.json', self.remote_folder_id)
+      content = fh.getbuffer()
       with open(os.path.join(self.dir_path, 'metadata.json'), "wb") as f:
         f.write(fh.getbuffer())
     logger.info('Updating local metadata.json')
@@ -252,9 +253,9 @@ class FileSyncer():
             remote_files[filename]['id'], os.path.join(self.dir_path, filename),
             f['modified_at']
           )
-          logger.info('Updated file %s. From %s to %s' % (
-          filename, pretty_date(remote_files[filename]['timestamp']),
-          pretty_date(f['modified_at'])))
+        logger.info('Updated file %s. From %s to %s' % (
+            filename, pretty_date(remote_files[filename]['timestamp']),
+            pretty_date(f['modified_at'])))
       else:
         if not dry_run:
           self.storage.upload_file(
@@ -279,7 +280,7 @@ class FileSyncer():
           self.remote_folder_id, 'metadata.json',
           os.path.join(self.dir_path, 'metadata.json')
         )
-      logger.info('Uploaded remote metadata.json.')
+      logger.info('Uploaded metadata.json to remote.')
     else:
       if not dry_run:
         self.storage.update_file(
@@ -287,10 +288,9 @@ class FileSyncer():
         )
       logger.info('Updated remote metadata.json.')
 
-  def sync(self, dry_run=True, verbose=False):
+  def sync(self, dry_run=False, verbose=False):
     global logger
-    # verbose = verbose or dry_run
-    verbose = True
+    verbose = verbose or dry_run
     if verbose or dry_run:
       logger = logging.getLogger('joaocli_verbose')
 
@@ -321,6 +321,11 @@ class FileSyncer():
     # Remote is empty but local has a metadata file.
     if remote_metadata is None:
       logger.info('Missing remote metadata.json')
+
+      # Remove all remote untracked files.
+      files = self.storage.list_files_in_folder(self.remote_folder_id)
+      for filename in files:
+        self.storage.delete_file(files[filename]['id'])
       return self.sync_remote_based_on_local(dry_run)
 
     local_id = int(local_metadata['id'])

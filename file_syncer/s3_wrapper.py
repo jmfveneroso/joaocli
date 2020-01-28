@@ -44,7 +44,7 @@ class S3Wrapper():
       file_id = name
       split_name = name.split('.')
       name = '.'.join(split_name[:-1])
-      timestamp= split_name[-1]
+      timestamp = int(split_name[-1])
       # obj = self.get_file(folder_id, name)
 
       files[name] = { 'id': file_id, 'timestamp': timestamp }
@@ -80,7 +80,12 @@ class S3Wrapper():
     self.s3.meta.client.delete_object(
       Bucket=self.bucket, Key="%s/%s" % (self.folder_id, file_id))
 
-  def update_file(self, filename, path, timestamp):
+  def update_file(self, file_id, path, timestamp):
+    filename = file_id
+    if filename != 'metadata.json':
+      filename = '.'.join(file_id.split('.')[:-1])
+
+    self.delete_file(file_id)
     self.upload_file(self.folder_id, filename, path, timestamp)
 
   def get_file_timestamp(self, folder_id, file_id):

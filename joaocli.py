@@ -11,10 +11,12 @@ import os
 import pickle
 import re
 import subprocess
+import sys
 import tempfile
+import termios
+import tty
 import yaml
 import os.path
-from tokenize import tokenize
 from collections import Counter
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -41,12 +43,10 @@ def sync(dry_run, verbose):
   #   dir_path + '/credentials.json',
   #   dir_path + '/token.pickle',
   # )
-  storage = file_syncer.S3Wrapper('joaocli')
+  storage = file_syncer.S3Wrapper('public')
   fsyncer = file_syncer.FileSyncer(
     storage,
-    os.path.join(dir_path, 'files'),
-    # 'joaocli',
-    'public',
+    os.path.join(dir_path, 'files')
   )
   fsyncer.sync(dry_run=dry_run, verbose=verbose)
 
@@ -186,23 +186,6 @@ def view_log(n):
     print_log_entry(e, print_date=(cur_date != e['date']))
     cur_date = e['date']
 
-    # if cur_date != e['date']:
-    #   cur_date = e['date']
-    #   padding = '==================================='
-    #   print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
-
-    # print(
-    #   bcolors.UNDERLINE + e['id'] + bcolors.ENDC,
-    #   e['time'],
-    #   bcolors.OKGREEN + e['title'] + bcolors.ENDC
-    # )
-    # is_empty = False
-    # for l in e['text']:
-    #   print(l)
-    #   is_empty = len(l) == 0
-    # if not is_empty:
-    #   print('')
-
     num_entries_to_print -= 1
     if num_entries_to_print == 0:
       break
@@ -281,7 +264,7 @@ def create_knowledge_piece():
     yaml.dump(data, f)
 
 def tknize(s):
-  tkns = re.compile("\s+|[:=(),.']").split(s)
+  tkns = re.compile("\s+|[:=(),.'?]").split(s)
   return [t for t in tkns if len(t) > 0]
 
 def vocab():
@@ -386,8 +369,6 @@ def search(q):
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
 
-  print('Results for query:', ' '.join(tkns))
-
   scored_entries = []
   for e in get_logs():
     words = tknize(e['title'])
@@ -408,8 +389,35 @@ def search(q):
 
   scored_entries = [e for e in scored_entries if e[0] > 0.0]
   scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
-  for e in scored_entries:
-    print_log_entry(e[1], e[0])
+
+  cursor = 0
+  orig_settings = termios.tcgetattr(sys.stdin)
+
+  pressed_key = None
+  while pressed_key != chr(27):
+    subprocess.call('clear')
+    print('Query:', bcolors.HEADER + q + bcolors.ENDC + ' ' + ' '.join(tkns))
+    print('Showing result %d of %d' % (cursor+1, len(scored_entries)))
+    print()
+
+    entry = scored_entries[cursor]
+    print_log_entry(entry[1], entry[0])
+
+    tty.setcbreak(sys.stdin)
+    pressed_key = sys.stdin.read(1)[0]
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+
+    if pressed_key == 'j' or pressed_key == 13:
+      cursor = cursor + 1 if cursor < len(scored_entries) - 1 else cursor
+    elif pressed_key == 'k':
+      cursor = cursor - 1 if cursor > 0 else cursor
+    elif pressed_key == chr(10):
+      # TODO: update entry score
+      return
+
+  # TODO: show all if flag --all
+  # for e in scored_entries:
+  #   print_log_entry(e[1], e[0])
 
 def replace_log_message(title_or_id):
   log_entry = None

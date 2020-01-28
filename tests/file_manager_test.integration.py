@@ -20,20 +20,21 @@ local_folder = os.path.join(root, 'files_test')
 storage = file_syncer.S3Wrapper('files_test')
 
 class FileSyncerTest(unittest.TestCase):
-  def copy_file_to_local(self, filename, new_filename=None):
+  def copy_file_to_local(self, filename, new_filename=None, timestamp=0):
     if new_filename is None:
       new_filename = filename
     copyfile(
       os.path.join(tests_folder, filename),
       os.path.join(local_folder, new_filename)
     )
+    os.utime(os.path.join(local_folder, new_filename), (timestamp, timestamp))
 
-  def copy_file_to_remote(self, filename, new_filename=None):
+  def copy_file_to_remote(self, filename, new_filename=None, timestamp=0):
     if new_filename is None:
       new_filename = filename
     storage.upload_file(
-      self.remote_folder_id, new_filename,
-      os.path.join(tests_folder, filename)
+      self.remote_folder_id, new_filename, os.path.join(tests_folder, filename),
+      timestamp
     )
 
   def setUp(self):
@@ -43,7 +44,7 @@ class FileSyncerTest(unittest.TestCase):
     # Create remote folder.
     self.remote_folder_id = storage.create_folder('files_test')
     self.file_syncer = file_syncer.FileSyncer(
-      storage, local_folder, self.remote_folder_id
+      storage, local_folder
     )
 
   def tearDown(self):
@@ -55,53 +56,53 @@ class FileSyncerTest(unittest.TestCase):
     # Remove remote folder.
     storage.delete_folder(self.remote_folder_id)
 
-  def test_ensure_empty_remote_consistency(self):
-    self.copy_file_to_remote("test.txt")
-    self.file_syncer.ensure_remote_consistency()
+  # def test_ensure_empty_remote_consistency(self):
+  #   self.copy_file_to_remote("test.txt")
+  #   self.file_syncer.ensure_remote_consistency()
 
-    files = storage.list_files_in_folder(self.remote_folder_id)
-    self.assertEqual(0, len(files))
+  #   files = storage.list_files_in_folder(self.remote_folder_id)
+  #   self.assertEqual(0, len(files))
 
-    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
-    self.assertTrue(fh) # Not None.
-    data = fh.getvalue().decode('utf-8').strip()
+  #   fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
+  #   self.assertTrue(fh) # Not None.
+  #   data = fh.getvalue().decode('utf-8').strip()
 
-    actual = json.loads(data)
-    expected = { 'id': 0, 'files': [] }
-    actual = json.dumps(actual, indent=2)
-    expected = json.dumps(expected, indent=2)
-    self.assertEqual(expected, actual)
+  #   actual = json.loads(data)
+  #   expected = { 'id': 0, 'files': [] }
+  #   actual = json.dumps(actual, indent=2)
+  #   expected = json.dumps(expected, indent=2)
+  #   self.assertEqual(expected, actual)
 
-  def test_ensure_remote_consistency(self):
-    self.copy_file_to_remote("test.txt")
-    self.copy_file_to_remote("test.png")
-    self.copy_file_to_remote("bad_metadata.json", "metadata.json")
+  # def test_ensure_remote_consistency(self):
+  #   self.copy_file_to_remote("test.txt")
+  #   self.copy_file_to_remote("test.png")
+  #   self.copy_file_to_remote("bad_metadata.json", "metadata.json")
 
-    files = storage.list_files_in_folder(self.remote_folder_id)
-    self.assertEqual(2, len(files))
+  #   files = storage.list_files_in_folder(self.remote_folder_id)
+  #   self.assertEqual(2, len(files))
 
-    self.file_syncer.ensure_remote_consistency()
+  #   self.file_syncer.ensure_remote_consistency()
 
-    # Metadata.json only lists "test.txt". File "test.png" should have been
-    # deleted.
-    files = storage.list_files_in_folder(self.remote_folder_id)
-    self.assertEqual(1, len(files))
+  #   # Metadata.json only lists "test.txt". File "test.png" should have been
+  #   # deleted.
+  #   files = storage.list_files_in_folder(self.remote_folder_id)
+  #   self.assertEqual(1, len(files))
 
-    # Metadata.json lists "test.txt" with timestamp "1234".
-    self.assertTrue('test.txt' in files)
-    self.assertEqual(1545730073, files['test.txt']['timestamp'])
+  #   # Metadata.json lists "test.txt" with timestamp "1234".
+  #   self.assertTrue('test.txt' in files)
+  #   self.assertEqual(1545730073, files['test.txt']['timestamp'])
 
-    fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
-    self.assertTrue(fh) # Not None.
-    data = fh.getvalue().decode('utf-8').strip()
+  #   fh = storage.get_file_in_folder('metadata.json', self.remote_folder_id)
+  #   self.assertTrue(fh) # Not None.
+  #   data = fh.getvalue().decode('utf-8').strip()
 
-    actual = json.loads(data)
-    expected = {
-      'id': 1, 'files': [{ 'name': 'test.txt', 'modified_at': 1545730073 }]
-    }
-    actual = json.dumps(actual, indent=2)
-    expected = json.dumps(expected, indent=2)
-    self.assertEqual(expected, actual)
+  #   actual = json.loads(data)
+  #   expected = {
+  #     'id': 1, 'files': [{ 'name': 'test.txt', 'modified_at': 1545730073 }]
+  #   }
+  #   actual = json.dumps(actual, indent=2)
+  #   expected = json.dumps(expected, indent=2)
+  #   self.assertEqual(expected, actual)
 
   def test_none_none_metadata(self):
     self.copy_file_to_local("test.txt")
@@ -199,11 +200,11 @@ class FileSyncerTest(unittest.TestCase):
     self.assertEqual(expected, actual)
 
   def test_local_update(self):
-    self.copy_file_to_local("test.txt")
-    self.copy_file_to_local("test2.txt")
+    self.copy_file_to_local("test.txt", timestamp=1545730073)
+    self.copy_file_to_local("test2.txt", timestamp=1545737000)
     self.copy_file_to_local("old_metadata.json", "metadata.json")
-    self.copy_file_to_remote("test.txt")
-    self.copy_file_to_remote("test.png")
+    self.copy_file_to_remote("test.txt", timestamp=1545730073)
+    self.copy_file_to_remote("test.png", timestamp=1545737000)
     self.copy_file_to_remote("metadata.json")
 
     self.file_syncer.sync()
