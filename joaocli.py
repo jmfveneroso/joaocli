@@ -10,6 +10,7 @@ import math
 import os
 import pickle
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -512,6 +513,33 @@ def tags():
     dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
     print("%s (%d): %s" % (t[0], t[2], dt))
 
+def backup():
+  print("Starting backup")
+  source_dir = os.path.join(dir_path, "files")
+  dest_dir = os.path.join(dir_path, "files_bak")
+
+  if os.path.isdir(dest_dir):
+    print("Directory %s already exists. Deleting files" % dest_dir)
+    for filename in os.listdir(dest_dir):
+      path = os.path.join(dest_dir, filename)
+      os.remove(path)
+      print("Deleted file at path %s" % path)
+  else:
+    os.mkdir(dest_dir)
+
+  for filename in os.listdir(source_dir):
+    source_file = os.path.join(source_dir, filename)
+    dest_file = os.path.join(dest_dir, filename)
+    shutil.copyfile(source_file, dest_file)
+
+    timestamp = os.stat(source_file)[8]
+    os.utime(dest_file, (timestamp, timestamp))
+
+    source_suffix = '/'.join(source_file.split('/')[-2:])
+    dest_suffix = '/'.join(dest_file.split('/')[-2:])
+    print("Copied from %s to %s" % (source_suffix, dest_suffix))
+  print("Finished backup")
+
 def process_query(args):
   query = ' '.join(args.command)
 
@@ -552,6 +580,9 @@ def process_query(args):
 
   if query == 'tags':
     return tags()
+
+  if query == 'bak':
+    return backup()
 
   if query == 'checkpoint':
     titles = get_titles()
