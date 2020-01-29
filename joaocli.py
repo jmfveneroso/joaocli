@@ -610,7 +610,7 @@ def process_query(args):
       return
     return replace_log_message(args.command[1])
 
-  if args.command[0] == 'log':
+  if query == 'log':
     # Log a message in the current open log file.
     return log_message()
 
