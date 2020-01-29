@@ -202,13 +202,8 @@ class FileSyncer():
         download_file = True
         logger.info('Remote file %s does not exist locally' % filename)
       else:
-        local_timestamp = local_files[filename]
-        if local_timestamp != f['modified_at']:
+        if int(local_files[filename]) != int(f['modified_at']):
           download_file = True
-        logger.info('File %s has local timestamp %s and remote timestamp %s' % (
-          filename,
-          pretty_date(local_timestamp),
-          pretty_date(f['modified_at'])))
 
       if download_file:
         fh = self.storage.get_file_in_folder(f['name'], self.remote_folder_id)
@@ -216,11 +211,18 @@ class FileSyncer():
           return None # Error
 
         if not dry_run:
-          with open(os.path.join(self.dir_path, filename), "wb") as f:
-            f.write(fh.getbuffer())
+          with open(os.path.join(self.dir_path, filename), "wb") as fw:
+            fw.write(fh.getbuffer())
           os.utime(os.path.join(self.dir_path, filename), (timestamp, timestamp))
-          logger.info('Downloading file %s %s' % (
+
+        if not f['name'] in local_files:
+          logger.info('File does not exist locally. Downloading file %s %s' % (
             filename, pretty_date(timestamp)))
+        else:
+          logger.info('File %s has local timestamp %s and remote timestamp %s' %
+            (filename,
+             pretty_date(local_files[filename]),
+             pretty_date(f['modified_at'])))
 
     remote_files = {f['name'] for f in remote_metadata['files']}
     local_files = self.get_local_files()
