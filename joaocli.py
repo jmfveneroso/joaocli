@@ -413,14 +413,14 @@ def search(q):
     elif pressed_key == 'k':
       cursor = cursor - 1 if cursor > 0 else cursor
     elif pressed_key == chr(10):
-      # TODO: update entry score
+      log_message_increase_count(entry[1]['id'])
       return
 
   # TODO: show all if flag --all
   # for e in scored_entries:
   #   print_log_entry(e[1], e[0])
 
-def replace_log_message(title_or_id):
+def find_log_entry(title_or_id):
   log_entry = None
   for e in get_logs():
     try:
@@ -433,8 +433,61 @@ def replace_log_message(title_or_id):
     if e['title'] == title_or_id:
       log_entry = e
       break
+  return log_entry
 
-  if log_entry is None:
+def log_message_increase_count(title_or_id):
+  e = find_log_entry(title_or_id)
+  if e is None:
+    print('Couldn\'t find this entry')
+    return
+
+  w_lines = []
+  with open(os.path.join(data_path, "log.%s.txt" % e['date']), 'r') as f:
+    pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
+    while True:
+      l = f.readline()
+      if not l:
+        break
+
+      match = re.search(pattern, l)
+      if match:
+        w_lines.append(l)
+        entry_id = match.group(1)
+        if entry_id == e['id']:
+          found = False
+          log_lines = []
+          while True:
+            l2 = f.readline()
+            if not l2:
+              break
+
+            if l2.startswith('+count='):
+              found = True
+              count = int(l2[7:])
+              log_lines.append("+count=%d\n" % (count+1))
+              break
+
+            log_lines.append(l2)
+            match = re.search(pattern, l2)
+            if match:
+              break
+
+          if not found:
+            log_lines = ['+count=1\n'] + log_lines
+
+          for l2 in log_lines:
+            w_lines.append(l2)
+      else:
+        w_lines.append(l)
+
+  with open(os.path.join(data_path, "log.%s.txt" % e['date']), 'w') as f:
+    for l in w_lines:
+      f.write(l)
+
+def replace_log_message(title_or_id):
+  e = find_log_entry(title_or_id)
+  log_entry = e
+  if e is None:
     print('Couldn\'t find this entry')
     return
 
