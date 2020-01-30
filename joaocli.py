@@ -12,6 +12,7 @@ import pickle
 import re
 import shutil
 import subprocess
+import signal
 import sys
 import tempfile
 import termios
@@ -22,6 +23,13 @@ from collections import Counter
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 data_path = os.path.join(dir_path, 'files')
+orig_settings = termios.tcgetattr(sys.stdin)
+
+def signal_handler(sig, frame):
+  global orig_settings
+  termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+  sys.exit(0)
+signal.signal(signal.SIGINT, signal_handler)
 
 class bcolors:
   HEADER = '\033[95m'
@@ -124,6 +132,7 @@ def get_log_entries(timestamp):
       else:
         title = s
 
+      count = 0
       content = []
       i += 1
       while i < len(lines):
@@ -132,8 +141,13 @@ def get_log_entries(timestamp):
           i -= 1
           break
         content.append(lines[i].strip())
+
+        line = lines[i].strip()
+        if line.startswith('+count='):
+          count = int(line[7:])
+
         i += 1
-      entries.append((time, title.strip(), content, entry_id, tags))
+      entries.append((time, title.strip(), content, entry_id, tags, count))
   return reversed(entries)
 
 def get_logs():
@@ -158,6 +172,7 @@ def get_logs():
         'text': e[2],
         'id': e[3],
         'tags': e[4],
+        'count': e[5],
       })
   return entries
 
@@ -355,7 +370,7 @@ def search_tag(tag):
     if tag in e['tags']:
       print_log_entry(e)
 
-def search(q):
+def search(q, show_all=False):
   v = load_vocab()
   tkns = tknize(q)
 
@@ -384,16 +399,27 @@ def search(q):
         if w in tkn_set:
           score += (1.0 / v[w]) ** 2
         norm += (1.0 / v[w]) ** 2
+
     if norm > 0.0:
       score /= math.sqrt(norm)
     scored_entries.append([score, e])
 
   scored_entries = [e for e in scored_entries if e[0] > 0.0]
+  for i in range(len(scored_entries)):
+    e = scored_entries[i][1]
+    if e['count'] > 0:
+      scored_entries[i][0] += e['count']
+
   scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
 
-  cursor = 0
-  orig_settings = termios.tcgetattr(sys.stdin)
+  if show_all:
+    for e in scored_entries:
+      print_log_entry(e[1], e[0])
+    return
 
+  global orig_settings
+
+  cursor = 0
   pressed_key = None
   while pressed_key != chr(27):
     subprocess.call('clear')
@@ -415,10 +441,6 @@ def search(q):
     elif pressed_key == chr(10):
       log_message_increase_count(entry[1]['id'])
       return
-
-  # TODO: show all if flag --all
-  # for e in scored_entries:
-  #   print_log_entry(e[1], e[0])
 
 def find_log_entry(title_or_id):
   log_entry = None
@@ -648,7 +670,7 @@ def process_query(args):
     return
 
   if not process_knowledge_piece(query):
-    search(query)
+    search(query, bool(args.all))
 
 if __name__ == '__main__':
   load_config()
@@ -660,6 +682,7 @@ if __name__ == '__main__':
   parser.add_argument('--version', action='version', version='%(prog)s 0.1')
   parser.add_argument('--type', type=str, help="set the KE type")
   parser.add_argument('--text', type=str, help="set the KE text")
+  parser.add_argument('-a', '--all', action='store_true')
   parser.add_argument('-d', '--dry-run', action='store_true')
   parser.add_argument('-v', '--verbose', action='store_true')
   parser.add_argument('-n', type=int, help="number of entries to print")
