@@ -148,6 +148,7 @@ class FileSyncer():
 
     if update_metadata:
       logger.info('There are untracked changes on the local folder')
+      logger.info('Updating remote based on local.')
       new_metadata = { 'id': int(local_metadata_id), 'files': [] }
       files = self.get_local_files()
       for filename in files:

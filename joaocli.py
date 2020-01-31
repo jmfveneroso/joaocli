@@ -102,9 +102,14 @@ def log_message():
     f.write("\n")
     f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
 
+  now = datetime.datetime.now()
+  current_time = now. strftime("%H:%M:%S")
+
   subprocess.run(
     ['vim', '+normal G$', os.path.join(data_path, filename)]
   )
+
+  sync(dry_run=False, verbose=True)
 
 def get_log_entries(timestamp):
   pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
@@ -412,6 +417,10 @@ def search(q, show_all=False):
 
   scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
 
+  if scored_entries == 0:
+    print("No results found")
+    return
+
   if show_all:
     for e in scored_entries:
       print_log_entry(e[1], e[0])
@@ -440,6 +449,9 @@ def search(q, show_all=False):
       cursor = cursor - 1 if cursor > 0 else cursor
     elif pressed_key == chr(10):
       log_message_increase_count(entry[1]['id'])
+      sync(dry_run=False, verbose=True)
+      return
+    elif pressed_key == 'q':
       return
 
 def find_log_entry(title_or_id):
@@ -558,6 +570,8 @@ def replace_log_message(title_or_id):
   subprocess.run(
     ['vim', '+normal G$', os.path.join(data_path, filename)]
   )
+
+  sync(dry_run=False, verbose=True)
 
 def get_tags():
   tags = set()
