@@ -9,7 +9,9 @@ import tempfile
 from datetime import datetime
 from dateutil.tz import *
 
-logging.config.fileConfig(os.path.abspath(os.path.join(os.path.dirname(__file__), '../logging.conf')))
+logging.config.fileConfig(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '../logging.conf')),
+    disable_existing_loggers=True)
 logger = logging.getLogger('joaocli_default')
 
 def pretty_date(timestamp):

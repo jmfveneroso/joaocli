@@ -137,6 +137,8 @@ def get_log_entries(timestamp):
       else:
         title = s
 
+      chrono_start = ''
+      chrono_end = ''
       count = 0
       content = []
       i += 1
@@ -151,8 +153,17 @@ def get_log_entries(timestamp):
         if line.startswith('+count='):
           count = int(line[7:])
 
+        if line.startswith('+chrono-start='):
+          chrono_start = str(line[14:])
+
+        if line.startswith('+chrono-end='):
+          chrono_end = str(line[12:])
+
         i += 1
-      entries.append((time, title.strip(), content, entry_id, tags, count))
+      entries.append((
+          time, title.strip(), content, entry_id, tags, count,
+          chrono_start, chrono_end
+      ))
   return reversed(entries)
 
 def get_logs():
@@ -178,6 +189,8 @@ def get_logs():
         'id': e[3],
         'tags': e[4],
         'count': e[5],
+        'chrono_start': e[6],
+        'chrono_end': e[7],
       })
   return entries
 
@@ -188,6 +201,16 @@ def get_titles():
     titles[e['title']] = e
   return titles
 
+def get_chronos():
+  chronos = {}
+  entries = get_logs()
+  for e in entries:
+    if e['chrono_start']:
+      chronos[e['chrono_start']] = e
+    if e['chrono_end']:
+      chronos[e['chrono_end']] = e
+  return chronos
+
 def view_titles():
   titles = get_titles()
   for t in titles:
@@ -195,6 +218,11 @@ def view_titles():
     s = e['date'] + ' ' + e['time'][1:-1]
     dt = datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
     print(e['id'], s, t)
+
+def view_chronos():
+  chronos = get_chronos()
+  for c in chronos:
+    print(c)
 
 def view_log(n):
   n = 10 if n is None else n
@@ -338,6 +366,60 @@ def print_log_entry(e, score=0.0, print_date=True):
   if not is_empty:
     print('')
 
+def seconds_since_midnight(date):
+  midnight = date.replace(hour=0, minute=0, second=0, microsecond=0)
+  seconds = (date - midnight).total_seconds()
+  return seconds
+
+def seconds_to_date(seconds):
+  d = datetime.datetime(year=2020, month=1, day=1, hour=0, minute=0, second=0)
+  d = d + datetime.timedelta(seconds=seconds)
+  return d.strftime("%H:%M:%S")
+
+def print_chrono(chrono):
+  logs = get_logs()
+  logs.reverse()
+
+  chrono_events = []
+  started = None
+  for e in logs:
+    if e['chrono_start'] == chrono:
+      d = datetime.datetime.strptime(
+        "%s %s" % (e['date'], e['time'][1:-1]), '%Y-%m-%d %H:%M:%S'
+      )
+      chrono_events.append(('S', d))
+
+    if e['chrono_end'] == chrono:
+      d = datetime.datetime.strptime(
+        "%s %s" % (e['date'], e['time'][1:-1]), '%Y-%m-%d %H:%M:%S'
+      )
+      chrono_events.append(('E', d))
+
+  lines = []
+
+  avg = { 'S': [], 'E': [], 'D': [] }
+  for i in range(len(chrono_events)):
+    e = chrono_events[i]
+    avg[e[0]].append(seconds_since_midnight(e[1]))
+
+    if i > 0 and e[0] == 'E' and chrono_events[i-1][0] == 'S':
+      duration = abs(chrono_events[i][1] - chrono_events[i-1][1])
+      avg['D'].append(duration.seconds)
+      lines.append("E: %s (%s)" % (
+          e[1].strftime("%Y-%m-%d %H:%M:%S"),
+          datetime.timedelta(seconds=duration.seconds)
+      ))
+    else:
+      lines.append("%s: %s" % (e[0], e[1].strftime("%Y-%m-%d %H:%M:%S")))
+
+  print('Average start: %s' % seconds_to_date(sum(avg['S']) // len(avg['S'])))
+  print('Average end: %s' % seconds_to_date(sum(avg['E']) // len(avg['E'])))
+  average_timespan = sum(avg['D']) // len(avg['D'])
+  print('Average time span: %s' % datetime.timedelta(seconds=average_timespan))
+
+  for l in reversed(lines):
+    print(l)
+
 def get_levenshtein_distance(w1, w2):
   memo = [i for i in range(len(w1) + 1)]
   memo2 = [0 for _ in range(len(w1) + 1)]
@@ -386,6 +468,10 @@ def search(q, show_all=False):
   titles = get_titles()
   if len(tkns) == 1 and tkns[0] in titles:
     return print_log_entry(titles[tkns[0]], 0.0)
+
+  chronos = get_chronos()
+  if len(tkns) == 1 and tkns[0] in chronos:
+    return print_chrono(tkns[0])
 
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
@@ -656,9 +742,8 @@ def process_query(args):
   if query == 'titles':
     return view_titles()
 
-  if query == 'lint':
-    # Lint knowledge files.
-    return
+  if query == 'chronos':
+    return view_chronos()
 
   if query == 'diff':
     # Show differences between data folders.

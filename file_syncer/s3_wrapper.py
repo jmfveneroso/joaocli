@@ -4,6 +4,7 @@ import argparse
 import boto3
 from datetime import datetime, timezone
 import io
+import logging
 import json
 import os
 import pickle
@@ -12,6 +13,10 @@ import tempfile
 import yaml
 import os.path
 from dateutil.tz import *
+
+logging.config.fileConfig(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '../logging.conf')),
+    disable_existing_loggers=True)
 
 class S3Wrapper():
   def __init__(self, folder_id):
