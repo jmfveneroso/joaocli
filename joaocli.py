@@ -139,7 +139,9 @@ def get_log_entries(timestamp):
 
       chrono_start = ''
       chrono_end = ''
+      child = ''
       count = 0
+      main = None
       content = []
       i += 1
       while i < len(lines):
@@ -159,10 +161,16 @@ def get_log_entries(timestamp):
         if line.startswith('+chrono-end='):
           chrono_end = str(line[12:])
 
+        if line.startswith('+main='):
+          main = str(line[6:])
+
+        if line.startswith('+child='):
+          child = str(line[7:])
+
         i += 1
       entries.append((
           time, title.strip(), content, entry_id, tags, count,
-          chrono_start, chrono_end
+          chrono_start, chrono_end, main, child
       ))
   return reversed(entries)
 
@@ -191,6 +199,8 @@ def get_logs():
         'count': e[5],
         'chrono_start': e[6],
         'chrono_end': e[7],
+        'main': e[8],
+        'child': e[9],
       })
   return entries
 
@@ -342,6 +352,56 @@ def load_vocab():
       v[arr[0]] = int(arr[1])
   return v
 
+class Block:
+  def __init__(self, lines, parent_title):
+    self.type = 'NULL'
+    self.score = 1
+    self.text = []
+    self.parent_title = parent_title
+    if len(lines) == 0:
+      return
+
+    if lines[0].startswith('[ ]'):
+      self.type = 'TASK'
+      self.title = lines[0][3:].strip()
+      lines = lines[1:]
+    elif lines[0].startswith('[x]'):
+      self.type = 'COMPLETE_TASK'
+      self.title = lines[0][3:].strip()
+      lines = lines[1:]
+    elif lines[0].startswith('+'):
+      self.type = 'COMMAND'
+    else:
+      self.type = 'TEXT'
+
+    for l in lines:
+      if l.startswith('+score '):
+        self.score = int(lines[0][7:])
+      else:
+        self.text = lines
+
+def get_blocks(e):
+  current_block, blocks = [], []
+  for l in e['text']:
+    if l.startswith('+main'):
+      is_main = True
+      continue
+
+    if len(l) == 0 or l.startswith('[ ]') or l.startswith('[x]') :
+      if len(current_block) > 0:
+        blocks.append(Block(current_block, e['title']))
+
+      current_block = []
+      if len(l) > 0:
+        current_block.append(l)
+    else:
+      current_block.append(l)
+
+  if len(current_block) > 0:
+    blocks.append(Block(current_block, e['title']))
+
+  return blocks
+
 def print_log_entry(e, score=0.0, print_date=True):
   padding = '==================================='
   if score > 0:
@@ -359,11 +419,60 @@ def print_log_entry(e, score=0.0, print_date=True):
   if len(e['tags']) > 0:
     print(bcolors.OKBLUE + ' '.join(e['tags']) + bcolors.ENDC)
 
-  is_empty = False
-  for l in e['text']:
-    print(l)
-    is_empty = len(l) == 0
-  if not is_empty:
+  blocks = get_blocks(e)
+  if e['main']:
+    print(bcolors.FAIL + 'MAIN ' + e['main'] + bcolors.ENDC)
+    print('')
+
+    for c in get_logs():
+      if c['child'] == e['main']:
+        blocks = blocks + get_blocks(c)
+
+  complete, total, num_tasks, complete_tasks = 0, 0, 0, 0
+  for b in blocks:
+    if b.type == 'TASK':
+      total += b.score
+      num_tasks += 1
+    elif b.type == 'COMPLETE_TASK':
+      complete += b.score
+      total += b.score
+      complete_tasks += 1
+      num_tasks += 1
+
+  if total > 0:
+    print(bcolors.HEADER + 'Score: %d / %d (%.2f) in %d of %d tasks' % (
+          complete, total, complete / total, complete_tasks, num_tasks) +
+          bcolors.ENDC)
+    print('')
+
+  # Print tasks.
+  for b in blocks:
+    if b.type != 'TASK':
+      continue
+
+    print(bcolors.WARNING + '[ ] ' + str(b.title) + bcolors.ENDC +
+          ' - ' + bcolors.OKBLUE + str(b.score) + bcolors.ENDC +
+          ' - ' + b.parent_title)
+    print('\n'.join(b.text), end='')
+    print('')
+
+  # Print texts.
+  for b in blocks:
+    if b.type != 'TEXT':
+      continue
+
+    print('\n'.join(b.text))
+    print('')
+
+  # Complete tasks.
+  for b in blocks:
+    if b.type != 'COMPLETE_TASK':
+      continue
+
+    print(bcolors.HEADER + '[x] ' + str(b.title) + bcolors.ENDC +
+          ' - ' + bcolors.OKBLUE + str(b.score) + bcolors.ENDC +
+          ' - ' + b.parent_title)
+    print('\n'.join(b.text), end='')
     print('')
 
 def seconds_since_midnight(date):
@@ -414,7 +523,10 @@ def print_chrono(chrono):
 
   print('Average start: %s' % seconds_to_date(sum(avg['S']) // len(avg['S'])))
   print('Average end: %s' % seconds_to_date(sum(avg['E']) // len(avg['E'])))
-  average_timespan = sum(avg['D']) // len(avg['D'])
+
+  average_timespan = 0
+  if len(avg['D']) > 0:
+    average_timespan = sum(avg['D']) // len(avg['D'])
   print('Average time span: %s' % datetime.timedelta(seconds=average_timespan))
 
   for l in reversed(lines):
