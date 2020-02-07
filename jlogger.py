@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import file_syncer
+import functools
 import jlogger
 import glob
 import io
@@ -52,7 +53,7 @@ class Block:
     if content[0].startswith('[ ]'):
       self.type = 'TASK'
       self.title = content[0][3:].strip()
-      lines = lines[1:]
+      self.content = content[1:]
       return
 
     if content[0].startswith('[x]'):
@@ -61,13 +62,50 @@ class Block:
       self.content = content[1:]
       return
 
+    if content[0].startswith('+'):
+      self.type = 'COMMAND'
+      self.title = content[0][1:].strip()
+      self.content = content[1:]
+      return
+
     self.type = 'TEXT'
     self.content = content
 
+  def print_detailed(self):
+    if self.type == 'TASK':
+      print('[ ] %s' % self.title)
+
+    if self.type == 'COMPLETE_TASK':
+      print('[x] %s' % self.title)
+
+    if self.type == 'COMMAND':
+      print('%s' % self.title)
+
+    print('\n'.join(self.content))
+
+  def print_summarized(self):
+    if self.type == 'TEXT':
+      print('\n'.join(self.content))
+
+  def __str__(self):
+    s = ''
+    if self.type == 'TASK':
+      s += '[ ] %s' % self.title + '\n'
+
+    if self.type == 'COMPLETE_TASK':
+      s += '[x] %s' % self.title + '\n'
+
+    if self.type == 'COMMAND':
+      s += '+%s' % self.title + '\n'
+
+    s += '\n'.join(self.content)
+    return s
+
 
 class LogEntry:
-  def __init__(self, entry_id, timestamp, header, content):
+  def __init__(self, log_file, entry_id, timestamp, header, content):
     # Main attributes.
+    self.log_file = log_file
     self.id = entry_id
     self.timestamp = timestamp
     self.modified_at = None
@@ -84,6 +122,7 @@ class LogEntry:
 
     self.parse_header(header)
     self.parse_content(content)
+    self.sort_blocks()
 
   def parse_header(self, header):
     tags = []
@@ -92,8 +131,12 @@ class LogEntry:
       self.title = header
     else:
       tags = match.group()[1:-1].lower().split(',')
-      self.tags = [header.strip() for t in tags]
+      self.tags = [t.strip() for t in tags]
       self.title = header[match.span()[1]:]
+
+  def is_block_start(self, s):
+    prefixes = ['[ ]', '[x]', '+']
+    return any([s.startswith(p) for p in prefixes])
 
   def parse_content(self, content):
     i = 0
@@ -119,33 +162,117 @@ class LogEntry:
         continue
 
       found_empty_line = False
-      block_content = []
+      block_content = [content[i]]
+      i += 1
       while i < len(content):
-        if len(content[i]) == 0:
+        line = content[i]
+        if len(line) == 0:
           if found_empty_line:
             break
+
           found_empty_line = True
-          block_content.append(content[i])
+          block_content.append(line)
           i += 1
           continue
-
-        if content[i].startswith('[ ]') or content[i].startswith('[x]') :
+        elif self.is_block_start(line):
           break
 
-        block_content.append(content[i])
-        self.blocks.append(Block(self, block_content))
+        found_empty_line = False
+        block_content.append(line)
         i += 1
-      i += 1
+      self.blocks.append(Block(self, block_content))
 
+  def sort_blocks(self):
+    def compare_fn(b1, b2):
+      precedence = { 'TASK': 0, 'COMMAND': 1, 'TEXT': 1, 'COMPLETE_TASK': 2 }
+      return precedence[b1.type] - precedence[b2.type]
+    self.blocks = sorted(self.blocks, key=functools.cmp_to_key(compare_fn))
+
+  def print_header(self):
+    print(
+      bcolors.UNDERLINE + ('%08d' % self.id) + bcolors.ENDC,
+      self.timestamp,
+      bcolors.OKGREEN + self.title + bcolors.ENDC,
+    )
+
+    if len(self.tags) > 0:
+      print(bcolors.OKBLUE + ' '.join(self.tags) + bcolors.ENDC)
+    print('')
+
+  def print_detailed(self):
+    self.print_header()
+    for b in self.blocks:
+      b.print_detailed()
+
+  def print_summarized(self):
+    self.print_header()
+    for b in self.blocks:
+      b.print_summarized()
+
+  def __str__(self):
+    s = (
+      "{:08d} ".format(self.id) +
+      "[%s] " % self.timestamp.strftime("%H:%M:%S") +
+      self.title + "\n\n"
+    )
+
+    for b in self.blocks:
+      s += str(b) + '\n'
+
+    return s
+
+
+class LogFile:
+  def __init__(self, date):
+    self.date = date
+    self.log_entries = []
+
+  def rewrite(self):
+    filename = "log.%s.txt" % str(self.date)
+    path = os.path.join(data_path, filename)
+
+    if not os.path.isfile(path):
+      raise ValueError(path + ' does not exist')
+
+    with open(path, 'w') as f:
+      dt = datetime.datetime.strptime(self.date, '%Y-%m-%d')
+      week_day = str(dt.strftime('%A'))
+      f.write("%s (%s)\n\n\n" % (self.date, week_day))
+
+      for e in self.log_entries:
+        f.write(str(e))
+
+  def get_path(self):
+    filename = "log.%s.txt" % str(self.date)
+    return os.path.join(data_path, filename)
+
+  def add_entry(self, entry):
+    self.log_entries.append(entry)
+    entry.log_file = self
+
+  def remove_entry(self, entry):
+    for i in range(len(self.log_entries)):
+      if self.log_entries[i].id == entry.id:
+        del self.log_entries[i]
+        break
+    entry.log_file = None
 
 class Logger:
   def __init__(self):
+    self.log_files = []
     self.log_entries = []
+    self.log_entries_by_id = {}
+    self.log_entries_by_title = {}
+    self.log_entries_by_tag = {}
+    self.log_files_by_date = {}
 
     self.load_log_files()
+    self.build_indices()
 
   def get_log_entries(self, date):
     with open(os.path.join(data_path, "log.%s.txt" % date)) as f:
+      log_file = LogFile(date)
+
       pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
       i, lines = 0, f.readlines()
       while i < len(lines):
@@ -154,7 +281,7 @@ class Logger:
           i += 1
           continue
 
-        entry_id = match.group(1)
+        entry_id = int(match.group(1))
         time = match.group(2)
         timestamp = datetime.datetime.strptime(
             '%s %s' % (date, time), "%Y-%m-%d [%H:%M:%S]")
@@ -170,17 +297,126 @@ class Logger:
           content.append(lines[i].strip())
           i += 1
 
-        self.log_entries.append(LogEntry(entry_id, timestamp, header, content))
+        new_entry = LogEntry(log_file, entry_id, timestamp, header, content)
+        self.log_entries.append(new_entry)
+        log_file.log_entries.append(new_entry)
+      self.log_files.append(log_file)
+      self.log_files_by_date[date] = log_file
 
   def load_log_files(self):
     files = glob.glob(os.path.join(data_path, 'log.*.txt'))
     dates = [path.split('/')[-1].split('.')[1] for path in files]
     dates.sort()
     for d in dates:
-      entries = self.get_log_entries(d)
+      self.get_log_entries(d)
 
   def build_indices(self):
-    pass
+    for e in self.log_entries:
+      self.log_entries_by_id[e.id] = e
+      self.log_entries_by_title[e.title.lower()] = e
+
+      for t in e.tags:
+        if t not in self.log_entries_by_tag:
+          self.log_entries_by_tag[t] = []
+        self.log_entries_by_tag[t].append(e)
+
+  def get_log_entry_by_id(self, entry_id):
+    if entry_id not in self.log_entries_by_id:
+      return None
+    return self.log_entries_by_id[entry_id]
+
+  def get_log_entry_by_title(self, title):
+    if title not in self.log_entries_by_title:
+      return None
+    return self.log_entries_by_title[title]
+
+  def get_log_entries_by_tag(self, tag):
+    if tag not in self.log_entries_by_tag:
+      return None
+    return self.log_entries_by_tag[tag]
+
+  def get_current_log_file(self):
+    date = datetime.date.today()
+    filename = "log.%s.txt" % str(date)
+    path = os.path.join(data_path, filename)
+    if not os.path.isfile(path):
+      with open(path, 'w') as f:
+        full_date = str(date)
+        week_day = str(date.strftime('%A'))
+        f.write("%s (%s)\n\n" % (full_date, week_day))
+
+        log_file = LogFile(date)
+        self.log_files.append(log_file)
+        self.log_files_by_date[date] = log_file
+    return self.log_files_by_date[str(date)]
+
+  def create_log_entry(self):
+    log_file = self.get_current_log_file()
+
+    current_id = None
+    with open(os.path.join(data_path, 'id.txt'), 'r') as f:
+      current_id = int(f.read().strip())
+    with open(os.path.join(data_path, 'id.txt'), 'w') as f:
+      f.write(str(int(current_id) + 1))
+
+    with open(log_file.get_path(), 'a') as f:
+      n = datetime.datetime.now()
+      f.write("\n")
+      f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
+
+    subprocess.run(
+      ['vim', '+normal G$', log_file.get_path()]
+    )
+
+  def edit_log_entry(self, entry):
+    print(str(entry))
+    return
+    filename = "log.%s.txt" % str(entry.log_file.date)
+    path = os.path.join(data_path, filename)
+
+    line_num = 1
+    if not os.path.isfile(path):
+      raise ValueError(path + ' does not exist')
+
+    pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
+    with open(path, 'r') as f:
+      for l in f:
+        match = re.search(pattern, l)
+        if match:
+          entry_id = int(match.group(1))
+          if entry_id == entry.id:
+            break
+
+        line_num += 1
+
+    subprocess.run(
+      ['vim', '+normal %dgg$' % line_num, os.path.join(data_path, filename)]
+    )
+
+  def replace_log_entry(self, entry):
+    log_file = entry.log_file
+    log_file.remove_entry(entry)
+    log_file.rewrite()
+
+    log_file = self.get_current_log_file()
+    now = datetime.datetime.now()
+    entry.timestamp = datetime.datetime.strptime(
+            '%s %s' % (log_file.date, now.strftime("%H:%M:%S")),
+            "%Y-%m-%d %H:%M:%S")
+
+    log_file.add_entry(entry)
+    log_file.rewrite()
+
+    subprocess.run(
+      ['vim', '+normal G$', log_file.get_path()]
+    )
+
+  def autoformat(self, date):
+    if date not in self.log_files_by_date:
+      raise ValueError('Date is invalid')
+
+    self.log_files_by_date[date].rewrite()
+
 
 def _find_log_entry(title_or_id):
   log_entry = None
@@ -197,42 +433,7 @@ def _find_log_entry(title_or_id):
       break
   return log_entry
 
-def _create_log_file():
-  today = datetime.date.today()
-  full_date = str(today)
-  week_day = str(today.strftime('%A'))
-  filename = os.path.join(data_path, "log.%s.txt" % str(today))
-  with open(filename, 'w') as f:
-    f.write("%s (%s)\n\n" % (full_date, week_day))
-
-def log_message():
-  filename = "log.%s.txt" % str(datetime.date.today())
-  if not os.path.isfile(os.path.join(data_path, filename)):
-    _create_log_file()
-
-  current_id = None
-  with open(os.path.join(data_path, 'id.txt'), 'r') as f:
-    current_id = int(f.read().strip())
-  with open(os.path.join(data_path, 'id.txt'), 'w') as f:
-    f.write(str(int(current_id) + 1))
-
-  with open(os.path.join(data_path, filename), 'a') as f:
-    n = datetime.datetime.now()
-    f.write("\n")
-    f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
-
-  now = datetime.datetime.now()
-  current_time = now.strftime("%H:%M:%S")
-
-  subprocess.run(
-    ['vim', '+normal G$', os.path.join(data_path, filename)]
-  )
-
-  sync(dry_run=False, verbose=True)
-
 def _get_log_entries(timestamp):
-  logger = Logger()
-
   pattern = "^(\d{8}) (\[\d{2}:\d{2}:\d{2}\])"
   entries = []
   current_time = None
@@ -472,120 +673,139 @@ def print_log_entry(e, score=0.0, print_date=True):
     print(l)
 
 def print_single_entry(e):
-  cursor = 0
-  num_lines = 100
-  pressed_key = None
-  while pressed_key != chr(27):
-    subprocess.call('clear')
-    padding = '==================================='
-    print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
+  padding = '==================================='
+  print(bcolors.HEADER + padding + e['date'] + padding + bcolors.ENDC)
 
-    print(
-      bcolors.UNDERLINE + e['id'] + bcolors.ENDC,
-      e['time'],
-      bcolors.OKGREEN + e['title'] + bcolors.ENDC
-    )
+  print(
+    bcolors.UNDERLINE + e['id'] + bcolors.ENDC,
+    e['time'],
+    bcolors.OKGREEN + e['title'] + bcolors.ENDC
+  )
 
-    if len(e['tags']) > 0:
-      print(bcolors.OKBLUE + ' '.join(e['tags']) + bcolors.ENDC)
+  if len(e['tags']) > 0:
+    print(bcolors.OKBLUE + ' '.join(e['tags']) + bcolors.ENDC)
 
-    blocks = _get_blocks(e)
-    if e['main']:
-      print(bcolors.FAIL + 'MAIN ' + e['main'] + bcolors.ENDC)
-      print('')
+  blocks = _get_blocks(e)
+  if e['main']:
+    print(bcolors.FAIL + 'MAIN ' + e['main'] + bcolors.ENDC)
+    print('')
 
-      for c in jlogger.get_logs():
-        if c['child'] == e['main']:
-          blocks = blocks + _get_blocks(c)
+  # print('\n'.join(e['text']))
+  for b in blocks:
+    if b.type == 'TEXT':
+      print('\n'.join(e['content']))
 
-    complete, total, num_tasks, complete_tasks = 0, 0, 0, 0
-    for b in blocks:
-      if b.type == 'TASK':
-        total += b.score
-        num_tasks += 1
-      elif b.type == 'COMPLETE_TASK':
-        complete += b.score
-        total += b.score
-        complete_tasks += 1
-        num_tasks += 1
+  #
+  # for b in blocks:
+  #   print(b.content)
+  #   # if b.type == 'TASK':
+  #   #   total += b.score
+  #   #   num_tasks += 1
+  #   # elif b.type == 'COMPLETE_TASK':
+  #   #   complete += b.score
+  #   #   total += b.score
+  #   #   complete_tasks += 1
+  #   #   num_tasks += 1
 
-    if total > 0:
-      print(bcolors.HEADER + 'Score: %d / %d (%.2f) in %d of %d tasks' % (
-            complete, total, complete / total, complete_tasks, num_tasks) +
-            bcolors.ENDC)
-      print('')
+  #   #   for c in jlogger.get_logs():
+  #   #     if c['child'] == e['main']:
+  #   #       blocks = blocks + _get_blocks(c)
 
-    task_blocks = [b for b in blocks if b.type == 'TASK']
-    main_tasks = [b for b in task_blocks if b.parent_title == e['title']]
-    child_tasks = [b for b in task_blocks if b.parent_title != e['title']]
+  #   # blocks = _get_blocks(e)
+  #   # if e['main']:
+  #   #   print(bcolors.FAIL + 'MAIN ' + e['main'] + bcolors.ENDC)
+  #   #   print('')
 
-    by_parent_title = {}
-    for b in child_tasks:
-      if not by_parent_title[b.parent_title]:
-        by_parent_title[b.parent_title] = []
-      by_parent_title[b.parent_title].append(b)
+  #   #   for c in jlogger.get_logs():
+  #   #     if c['child'] == e['main']:
+  #   #       blocks = blocks + _get_blocks(c)
 
-    num_lines = 0
-    # Print tasks.
-    for b in main_tasks:
-      line = (bcolors.WARNING + '[ ] ' + str(b.title) + ' - ' + str(b.score) +
-              bcolors.ENDC)
+  #   # complete, total, num_tasks, complete_tasks = 0, 0, 0, 0
+  #   # for b in blocks:
+  #   #   if b.type == 'TASK':
+  #   #     total += b.score
+  #   #     num_tasks += 1
+  #   #   elif b.type == 'COMPLETE_TASK':
+  #   #     complete += b.score
+  #   #     total += b.score
+  #   #     complete_tasks += 1
+  #   #     num_tasks += 1
 
-      if num_lines == cursor:
-        print(bcolors.UNDERLINE + line + bcolors.ENDC)
-      else:
-        print(line)
+  #   # if total > 0:
+  #   #   print(bcolors.HEADER + 'Score: %d / %d (%.2f) in %d of %d tasks' % (
+  #   #         complete, total, complete / total, complete_tasks, num_tasks) +
+  #   #         bcolors.ENDC)
+  #   #   print('')
 
-      print('\n'.join(b.text), end='')
-      print('')
-      num_lines += 1
+  #   # task_blocks = [b for b in blocks if b.type == 'TASK']
+  #   # main_tasks = [b for b in task_blocks if b.parent_title == e['title']]
+  #   # child_tasks = [b for b in task_blocks if b.parent_title != e['title']]
 
-    for t in by_parent_title:
-      print(bcolors.BOLD + t + bcolors.ENDC)
-      for b in by_parent_title[t]:
-        line = (bcolors.WARNING + '[ ] ' + str(b.title) +
-              ' - ' + bcolors.OKBLUE + str(b.score) +
-                ' - ' + b.parent_title)
+  #   # by_parent_title = {}
+  #   # for b in child_tasks:
+  #   #   if not by_parent_title[b.parent_title]:
+  #   #     by_parent_title[b.parent_title] = []
+  #   #   by_parent_title[b.parent_title].append(b)
 
-        if num_lines == cursor:
-          print(bcolors.UNDERLINE + line + bcolors.ENDC)
-        else:
-          print(line)
+  #   # # Print tasks.
+  #   # num_lines = 0
+  #   # for b in main_tasks:
+  #   #   line = (bcolors.WARNING + '[ ] ' + str(b.title) + ' - ' + str(b.score) +
+  #   #           bcolors.ENDC)
 
-        print('\n'.join(b.text), end='')
-        print('')
-        num_lines += 1
+  #   #   if num_lines == cursor:
+  #   #     print(bcolors.UNDERLINE + line + bcolors.ENDC)
+  #   #   else:
+  #   #     print(line)
 
-    # Print texts.
-    for b in blocks:
-      if b.type != 'TEXT':
-        continue
+  #   #   print('\n'.join(b.text), end='')
+  #   #   print('')
+  #   #   num_lines += 1
 
-      print('\n'.join(b.text))
-      print('')
+  #   # for t in by_parent_title:
+  #   #   print(bcolors.BOLD + t + bcolors.ENDC)
+  #   #   for b in by_parent_title[t]:
+  #   #     line = (bcolors.WARNING + '[ ] ' + str(b.title) +
+  #   #           ' - ' + bcolors.OKBLUE + str(b.score) +
+  #   #             ' - ' + b.parent_title)
 
-    # Complete tasks.
-    for b in blocks:
-      if b.type != 'COMPLETE_TASK':
-        continue
+  #   #     if num_lines == cursor:
+  #   #       print(bcolors.UNDERLINE + line + bcolors.ENDC)
+  #   #     else:
+  #   #       print(line)
 
-      print(bcolors.HEADER + '[x] ' + str(b.title) + bcolors.ENDC +
-            ' - ' + bcolors.OKBLUE + str(b.score) + bcolors.ENDC +
-            ' - ' + b.parent_title)
-      print('\n'.join(b.text), end='')
-      print('')
+  #   #     print('\n'.join(b.content), end='')
+  #   #     print('')
+  #   #     num_lines += 1
 
-    tty.setcbreak(sys.stdin)
-    pressed_key = sys.stdin.read(1)[0]
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+  #   # # Print texts.
+  #   # for b in blocks:
+  #   #   if b.type != 'TEXT':
+  #   #     continue
 
-    if pressed_key == 'j' or pressed_key == 13:
-      cursor = cursor + 1 if cursor < num_lines - 1 else cursor
-    elif pressed_key == 'k':
-      cursor = cursor - 1 if cursor > 0 else cursor
-    elif pressed_key == chr(10):
-      return
-    elif pressed_key == 'q':
-      return
+  #   #   print('\n'.join(b.content))
+  #   #   print('')
 
+  #   # # Complete tasks.
+  #   # for b in blocks:
+  #   #   if b.type != 'COMPLETE_TASK':
+  #   #     continue
 
+  #   #   print(bcolors.HEADER + '[x] ' + str(b.title) + bcolors.ENDC +
+  #   #         ' - ' + bcolors.OKBLUE + str(b.score) + bcolors.ENDC +
+  #   #         ' - ' + b.parent_title)
+  #   #   print('\n'.join(b.content), end='')
+  #   #   print('')
+
+  #   # tty.setcbreak(sys.stdin)
+  #   # pressed_key = sys.stdin.read(1)[0]
+  #   # termios.tcsetattr(sys.stdin, termios.TCSADRAIN, orig_settings)
+
+  #   # if pressed_key == 'j' or pressed_key == 13:
+  #   #   cursor = cursor + 1 if cursor < num_lines - 1 else cursor
+  #   # elif pressed_key == 'k':
+  #   #   cursor = cursor - 1 if cursor > 0 else cursor
+  #   # elif pressed_key == chr(10):
+  #   #   return
+  #   # elif pressed_key == 'q':
+  #   #   return

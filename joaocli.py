@@ -77,6 +77,7 @@ def load_knowledge():
 
 def get_titles():
   titles = {}
+  logger = jlogger.Logger()
   entries = jlogger.get_logs()
   for e in entries:
     titles[e['title']] = e
@@ -266,27 +267,38 @@ def get_closest_word(w, vocab):
 
   return min_word
 
-def search_tag(tag):
-  entries = []
-  for e in jlogger.get_logs():
-    if tag in e['tags']:
-      jlogger.print_log_entry(e)
+def try_exact_match(logger, q):
+  e = logger.get_log_entry_by_title(q)
+  if e:
+    e.print_detailed()
+    return True
+
+  e = logger.get_log_entry_by_id(q)
+  if e:
+    e.print_detailed()
+    return True
+
+  entries = logger.get_log_entries_by_tag(q)
+  if entries:
+    for e in entries:
+      e.print_summarized()
+    return True
+
+  # TODO: fix chrono.
+  chronos = get_chronos()
+  if q in chronos:
+    return print_chrono(q)
+
+  return False
 
 def search(q, show_all=False):
+  logger = jlogger.Logger()
+
   v = load_vocab()
   tkns = tknize(q)
 
-  tags = get_tags()
-  if len(tkns) == 1 and tkns[0] in tags:
-    return search_tag(tkns[0])
-
-  titles = get_titles()
-  if len(tkns) == 1 and tkns[0] in titles:
-    return jlogger.print_single_entry(titles[tkns[0]])
-
-  chronos = get_chronos()
-  if len(tkns) == 1 and tkns[0] in chronos:
-    return print_chrono(tkns[0])
+  if try_exact_match(logger, tkns[0].lower()):
+    return
 
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t.lower() for t in tkns }
@@ -420,10 +432,45 @@ def process_query(args):
   if args.command[0] == 'replace':
     if len(args.command) < 2:
       return
-    return jlogger.replace_log_message(args.command[1])
+
+    q = args.command[1]
+    logger = jlogger.Logger()
+    e = logger.get_log_entry_by_title(q)
+    if e is None:
+      e = logger.get_log_entry_by_id(int(q))
+
+    if e is None:
+      print('Entry does not exist')
+    else:
+      logger.replace_log_entry(e)
+    return
+
+  if args.command[0] == 'edit':
+    if len(args.command) < 2:
+      return
+
+    q = args.command[1]
+    logger = jlogger.Logger()
+    e = logger.get_log_entry_by_title(q)
+    if e is None:
+      e = logger.get_log_entry_by_id(int(q))
+
+    if e is None:
+      print('Entry does not exist')
+    else:
+      logger.edit_log_entry(e)
+    return
+
+  if args.command[0] == 'autoformat':
+    if len(args.command) < 2:
+      return
+
+    logger = jlogger.Logger()
+    return logger.autoformat(args.command[1])
 
   if query == 'log':
-    return jlogger.log_message()
+    logger = jlogger.Logger()
+    return logger.create_log_entry()
 
   if query == 'view':
     return view_log(args.n)
