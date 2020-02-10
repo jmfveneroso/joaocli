@@ -78,28 +78,20 @@ def load_knowledge():
 def get_titles():
   titles = {}
   logger = jlogger.Logger()
-  entries = jlogger.get_logs()
-  for e in entries:
-    titles[e['title']] = e
+  for e in logger.log_entries:
+    titles[e.title] = e
   return titles
 
 def get_chronos():
-  chronos = {}
-  entries = jlogger.get_logs()
-  for e in entries:
-    if e['chrono_start']:
-      chronos[e['chrono_start']] = e
-    if e['chrono_end']:
-      chronos[e['chrono_end']] = e
-  return chronos
+  # TODO: fix
+  return []
 
 def view_titles():
   titles = get_titles()
   for t in titles:
     e = titles[t]
-    s = e['date'] + ' ' + e['time'][1:-1]
-    dt = datetime.datetime.strptime(s, '%Y-%m-%d %H:%M:%S')
-    print(e['id'], s, t)
+    dt = datetime.datetime.strftime(e.timestamp, '%Y-%m-%d %H:%M:%S')
+    print(e.id, dt, t)
 
 def view_chronos():
   chronos = get_chronos()
@@ -107,19 +99,8 @@ def view_chronos():
     print(c)
 
 def view_log(n):
-  n = 10 if n is None else n
-  n = 1000 if n == 0 else n
-  num_entries_to_print = n
-
-  entries = jlogger.get_logs()
-  cur_date = None
-  for e in entries:
-    jlogger.print_log_entry(e, print_date=(cur_date != e['date']))
-    cur_date = e['date']
-
-    num_entries_to_print -= 1
-    if num_entries_to_print == 0:
-      break
+  logger = jlogger.Logger()
+  logger.print_log_entries(n)
 
 def process_knowledge_piece(q):
   knowledge_pieces = load_knowledge()
@@ -304,11 +285,8 @@ def search(q, show_all=False):
   tkn_set = { t.lower() for t in tkns }
 
   scored_entries = []
-  for e in jlogger.get_logs():
-    words = tknize(e['title'])
-    for l in e['text']:
-      words += tknize(l)
-    words = [w.lower() for w in words]
+  for e in reversed(logger.log_entries):
+    words = e.get_tokens()
 
     score = 0
     norm = 0
@@ -325,18 +303,18 @@ def search(q, show_all=False):
   scored_entries = [e for e in scored_entries if e[0] > 0.0]
   for i in range(len(scored_entries)):
     e = scored_entries[i][1]
-    if e['count'] > 0:
-      scored_entries[i][0] += e['count']
+    # if e['count'] > 0:
+    #   scored_entries[i][0] += e['count']
 
   scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
 
-  if scored_entries == 0:
+  if len(scored_entries) == 0:
     print("No results found")
     return
 
   if show_all:
     for e in scored_entries:
-      jlogger.print_log_entry(e[1], e[0])
+      e.print_summarized()
     return
 
   global orig_settings
@@ -350,7 +328,7 @@ def search(q, show_all=False):
     print()
 
     entry = scored_entries[cursor]
-    jlogger.print_log_entry(entry[1], entry[0])
+    entry[1].print_detailed()
 
     tty.setcbreak(sys.stdin)
     pressed_key = sys.stdin.read(1)[0]
@@ -361,7 +339,8 @@ def search(q, show_all=False):
     elif pressed_key == 'k':
       cursor = cursor - 1 if cursor > 0 else cursor
     elif pressed_key == chr(10):
-      jlogger.log_message_increase_count(entry[1]['id'])
+      # TODO: increase count.
+      # jlogger.log_message_increase_count(entry[1]['id'])
       sync(dry_run=False, verbose=True)
       return
     elif pressed_key == 'q':
@@ -377,12 +356,10 @@ def get_tags():
 
 def tags():
   tags = {}
-  entries = jlogger.get_logs()
-  for e in entries:
-    for t in e['tags']:
-      dt = datetime.datetime.strptime(
-        "%s %s" % (e['date'], e['time'][1:-1]), '%Y-%m-%d %H:%M:%S'
-      )
+  logger = jlogger.Logger()
+  for e in logger.log_entries:
+    for t in e.tags:
+      dt = e.timestamp
 
       if not t in tags:
         tags[t] = (dt, 0)
@@ -467,6 +444,13 @@ def process_query(args):
 
     logger = jlogger.Logger()
     return logger.autoformat(args.command[1])
+
+  if args.command[0] == 'chrono':
+    if len(args.command) < 3:
+      return
+
+    logger = jlogger.Logger()
+    return logger.add_chrono(args.command[1], args.command[2])
 
   if query == 'log':
     logger = jlogger.Logger()
