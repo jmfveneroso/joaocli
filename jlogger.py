@@ -386,8 +386,6 @@ class Logger:
     )
 
   def edit_log_entry(self, entry):
-    print(str(entry))
-    return
     filename = "log.%s.txt" % str(entry.log_file.date)
     path = os.path.join(data_path, filename)
 
