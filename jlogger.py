@@ -52,12 +52,15 @@ class Block:
 
     self.init_block(content)
 
-  def parse_attributes(self, content):
+  def archive(self):
+    return 'archive' in self.attributes
+
+  def parse_content(self, content):
     i = 0
     while i < len(content):
       line = content[i]
       if line.startswith('%'):
-        key = line[1:line.find(' ')]
+        key = line[1:] if line.find(' ') == -1 else line[1:line.find(' ')]
         value = line[2+len(key):]
         self.attributes[key] = value
         i += 1
@@ -72,23 +75,23 @@ class Block:
     if content[0].startswith('[ ]'):
       self.type = 'TASK'
       self.title = content[0][3:].strip()
-      self.parse_attributes(content[1:])
+      self.parse_content(content[1:])
       return
 
     if content[0].startswith('[x]'):
       self.type = 'COMPLETE_TASK'
       self.title = content[0][3:].strip()
-      self.parse_attributes(content[1:])
+      self.parse_content(content[1:])
       return
 
     if content[0].startswith('+'):
       self.type = 'COMMAND'
       self.title = content[0][1:].strip()
-      self.parse_attributes(content[1:])
+      self.parse_content(content[1:])
       return
 
     self.type = 'TEXT'
-    self.content = content
+    self.parse_content(content)
 
   def print_command(self, command):
     if command == 'progress':
@@ -114,6 +117,9 @@ class Block:
     return datetime.timedelta(seconds=duration.seconds)
 
   def print_detailed(self):
+    if 'archive' in self.attributes:
+      print('ARCHIVE: run "$ j archive"')
+
     if self.type == 'TASK' or self.type == 'COMPLETE_TASK':
       if self.type == 'TASK':
         print('[ ] %s' % self.title)
@@ -165,6 +171,8 @@ class Block:
     if self.type == 'COMMAND':
       s += '+%s' % self.title + '\n'
 
+    for attr in self.attributes:
+      s += '%' + attr + ' ' + self.attributes[attr]
     s += '\n'.join(self.content)
     return s
 
@@ -248,6 +256,13 @@ class LogEntry:
         block_content.append(line)
         i += 1
       self.blocks.append(Block(self, block_content))
+
+  def remove_block(self, block):
+    for i in range(len(self.blocks)):
+      if self.blocks[i] is block:
+        del self.blocks[i]
+        break
+    block.parent = None
 
   def sort_blocks(self):
     def compare_fn(b1, b2):
@@ -442,6 +457,22 @@ class Logger:
       ['vim', '+normal G$', log_file.get_path()]
     )
 
+  def create_log_entry_from_blocks(self, parent, blocks):
+    log_file = self.get_current_log_file()
+
+    current_id = None
+    with open(os.path.join(data_path, 'id.txt'), 'r') as f:
+      current_id = int(f.read().strip())
+    with open(os.path.join(data_path, 'id.txt'), 'w') as f:
+      f.write(str(int(current_id) + 1))
+
+    with open(log_file.get_path(), 'a') as f:
+      n = datetime.datetime.now()
+      f.write("\n")
+      f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
+      f.write("Archived Block from %s\n\n" % parent.title)
+      f.write('\n'.join(str(b) for b in blocks))
+
   def edit_log_entry(self, entry):
     filename = "log.%s.txt" % str(entry.log_file.date)
     path = os.path.join(data_path, filename)
@@ -502,3 +533,15 @@ class Logger:
       n -= 1
       if n == 0:
         break
+
+  def archive(self):
+    for e in self.log_entries:
+      blocks = []
+      for b in e.blocks:
+        if b.archive():
+          blocks.append(b)
+          e.remove_block(b)
+
+      if len(blocks) > 0:
+        self.create_log_entry_from_blocks(e, blocks)
+        e.log_file.rewrite()

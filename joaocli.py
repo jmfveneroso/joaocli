@@ -477,6 +477,10 @@ def process_query(args):
   if query == 'bak':
     return backup()
 
+  if query == 'archive':
+    logger = jlogger.Logger()
+    return logger.archive()
+
   if query == 'checkpoint':
     titles = get_titles()
     if 'Checkpoint' in titles:
