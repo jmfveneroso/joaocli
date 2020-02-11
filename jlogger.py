@@ -90,6 +90,25 @@ class Block:
     self.type = 'TEXT'
     self.content = content
 
+  def print_command(self, command):
+    if command == 'progress':
+      num_tasks, num_complete_tasks = 0, 0
+      for b in self.parent.blocks:
+        if b.type == 'COMPLETE_TASK':
+          num_complete_tasks += 1
+          num_tasks += 1
+        if b.type == 'TASK':
+          num_tasks += 1
+
+    progress_bar_size = 20
+    progress = num_complete_tasks / num_tasks
+    ticks = round(progress_bar_size * progress)
+    progress_bar = '[' + '=' * ticks + ' ' * (progress_bar_size - ticks) + ']';
+    print('Progress: %s %s (%d of %d tasks)' %
+          (progress_bar, "{0:.0%}".format(progress),
+           num_complete_tasks, num_tasks))
+
+
   def get_elapsed_time(self, date):
     duration = abs(datetime.datetime.now() - date)
     return datetime.timedelta(seconds=duration.seconds)
@@ -121,7 +140,7 @@ class Block:
         print('Finished at: %s (%s)' % (finish_date, time_to_complete))
 
     if self.type == 'COMMAND':
-      print('%s' % self.title)
+      self.print_command(self.title)
 
     print('\n'.join(self.content))
 
@@ -170,7 +189,7 @@ class LogEntry:
 
     self.parse_header(header)
     self.parse_content(content)
-    self.sort_blocks()
+    # self.sort_blocks()
 
   def parse_header(self, header):
     tags = []
