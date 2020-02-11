@@ -48,8 +48,22 @@ class Block:
     self.type = ''
     self.title = ''
     self.content = []
+    self.attributes = {}
 
     self.init_block(content)
+
+  def parse_attributes(self, content):
+    i = 0
+    while i < len(content):
+      line = content[i]
+      if line.startswith('%'):
+        key = line[1:line.find(' ')]
+        value = line[2+len(key):]
+        self.attributes[key] = value
+        i += 1
+      else:
+        break
+    self.content = content[i:]
 
   def init_block(self, content):
     if len(content) == 0:
@@ -58,30 +72,53 @@ class Block:
     if content[0].startswith('[ ]'):
       self.type = 'TASK'
       self.title = content[0][3:].strip()
-      self.content = content[1:]
+      self.parse_attributes(content[1:])
       return
 
     if content[0].startswith('[x]'):
       self.type = 'COMPLETE_TASK'
       self.title = content[0][3:].strip()
-      self.content = content[1:]
+      self.parse_attributes(content[1:])
       return
 
     if content[0].startswith('+'):
       self.type = 'COMMAND'
       self.title = content[0][1:].strip()
-      self.content = content[1:]
+      self.parse_attributes(content[1:])
       return
 
     self.type = 'TEXT'
     self.content = content
 
-  def print_detailed(self):
-    if self.type == 'TASK':
-      print('[ ] %s' % self.title)
+  def get_elapsed_time(self, date):
+    duration = abs(datetime.datetime.now() - date)
+    return datetime.timedelta(seconds=duration.seconds)
 
-    if self.type == 'COMPLETE_TASK':
-      print('[x] %s' % self.title)
+  def print_detailed(self):
+    if self.type == 'TASK' or self.type == 'COMPLETE_TASK':
+      if self.type == 'TASK':
+        print('[ ] %s' % self.title)
+      else:
+        print('[x] %s' % self.title)
+
+      creation_date = None
+      finish_date = None
+      if 'created-at' in self.attributes:
+        creation_date = datetime.datetime.strptime(
+            self.attributes['created-at'], '%Y-%m-%d %H:%M:%S')
+
+        elapsed_time = self.get_elapsed_time(creation_date)
+        print('Created at: %s (%s)' % (creation_date, elapsed_time))
+
+      if 'finished-at' in self.attributes:
+        finish_date = datetime.datetime.strptime(
+            self.attributes['finished-at'], '%Y-%m-%d %H:%M:%S')
+
+        time_to_complete = 0
+        if 'created-at' in self.attributes:
+          time_to_complete = abs(finish_date - creation_date)
+        time_to_complete = datetime.timedelta(seconds=time_to_complete.seconds)
+        print('Finished at: %s (%s)' % (finish_date, time_to_complete))
 
     if self.type == 'COMMAND':
       print('%s' % self.title)
@@ -274,6 +311,7 @@ class LogFile:
         break
     entry.log_file = None
 
+
 class Logger:
   def __init__(self):
     self.log_files = []
@@ -329,7 +367,7 @@ class Logger:
 
   def build_indices(self):
     for e in self.log_entries:
-      self.log_entries_by_id[e.id] = e
+      self.log_entries_by_id[int(e.id)] = e
       self.log_entries_by_title[e.title.lower()] = e
 
       for t in e.tags:
@@ -364,7 +402,7 @@ class Logger:
 
         log_file = LogFile(date)
         self.log_files.append(log_file)
-        self.log_files_by_date[date] = log_file
+        self.log_files_by_date[str(date)] = log_file
     return self.log_files_by_date[str(date)]
 
   def create_log_entry(self):
@@ -438,7 +476,8 @@ class Logger:
     with open(os.path.join(data_path, 'chrono.txt'), 'a') as f:
       f.write(timestamp + ' ' + chrono_type + ' ' + chrono_name + '\n')
 
-  def print_log_entries(self, n=10):
+  def print_log_entries(self, n):
+    n = 10 if (n is None) else n
     for e in reversed(self.log_entries):
       e.print_summarized()
       n -= 1

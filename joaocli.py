@@ -254,10 +254,13 @@ def try_exact_match(logger, q):
     e.print_detailed()
     return True
 
-  e = logger.get_log_entry_by_id(q)
-  if e:
-    e.print_detailed()
-    return True
+  try:
+    e = logger.get_log_entry_by_id(int(q))
+    if e:
+      e.print_detailed()
+      return True
+  except ValueError:
+    pass
 
   entries = logger.get_log_entries_by_tag(q)
   if entries:
