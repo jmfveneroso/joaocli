@@ -103,14 +103,13 @@ class Block:
         if b.type == 'TASK':
           num_tasks += 1
 
-    progress_bar_size = 20
-    progress = num_complete_tasks / num_tasks
-    ticks = round(progress_bar_size * progress)
-    progress_bar = '[' + '=' * ticks + ' ' * (progress_bar_size - ticks) + ']';
-    print('Progress: %s %s (%d of %d tasks)' %
-          (progress_bar, "{0:.0%}".format(progress),
-           num_complete_tasks, num_tasks))
-
+      progress_bar_size = 20
+      progress = num_complete_tasks / num_tasks
+      ticks = round(progress_bar_size * progress)
+      progress_bar = '[' + '=' * ticks + ' ' * (progress_bar_size - ticks) + ']';
+      print('Progress: %s %s (%d of %d tasks)' %
+            (progress_bar, "{0:.0%}".format(progress),
+             num_complete_tasks, num_tasks))
 
   def get_elapsed_time(self, date):
     duration = abs(datetime.datetime.now() - date)
@@ -298,10 +297,14 @@ class LogEntry:
     return tokens
 
   def __str__(self):
+    tags = ''
+    if len(self.tags) > 0:
+      tags = '(' + ' '.join(self.tags) + ')'
+
     s = (
       "{:08d} ".format(self.id) +
       "[%s] " % self.timestamp.strftime("%H:%M:%S") +
-      self.title + "\n\n"
+      tags + ' ' + self.title.strip() + "\n\n"
     )
 
     for b in self.blocks:

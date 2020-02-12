@@ -141,10 +141,9 @@ def vocab():
     words += tknize(key)
     words += tknize(kps[key]['text'])
 
-  for e in jlogger.get_logs():
-    words += tknize(e['title'])
-    for l in e['text']:
-      words += tknize(l)
+  logger = jlogger.Logger()
+  for e in logger.log_entries:
+    words += e.get_tokens()
   words = [w.lower() for w in words]
 
   with open(os.path.join(data_path, 'vocab.txt'), 'w') as f:
@@ -265,7 +264,7 @@ def try_exact_match(logger, q):
   entries = logger.get_log_entries_by_tag(q)
   if entries:
     for e in entries:
-      e.print_summarized()
+      e.print_detailed()
     return True
 
   # TODO: fix chrono.
