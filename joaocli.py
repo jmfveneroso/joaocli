@@ -357,21 +357,9 @@ def get_tags():
   return tags
 
 def tags():
-  tags = {}
   logger = jlogger.Logger()
-  for e in logger.log_entries:
-    for t in e.tags:
-      dt = e.timestamp
-
-      if not t in tags:
-        tags[t] = (dt, 0)
-      elif dt > tags[t][0]:
-        tags[t] = (dt, tags[t][1])
-      tags[t] = (tags[t][0], tags[t][1] + 1)
-
-  tags = [(t, tags[t][0], tags[t][1]) for t in tags]
-  sorted_tags = sorted(tags, key=lambda e : e[1], reverse=True)
-  for t in sorted_tags:
+  tags = logger.get_tags()
+  for t in tags:
     dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
     print("%s (%d): %s" % (t[0], t[2], dt))
 
@@ -401,6 +389,32 @@ def backup():
     dest_suffix = '/'.join(dest_file.split('/')[-2:])
     print("Copied from %s to %s" % (source_suffix, dest_suffix))
   print("Finished backup")
+
+def overview():
+  logger = jlogger.Logger()
+  tags_ = logger.get_tags()
+
+  entries_by_tags = logger.get_important_entries_by_tag()
+  for t in entries_by_tags:
+    entries = logger.log_entries_by_tag[t]
+    print(bcolors.HEADER + '==============================' + bcolors.ENDC)
+    print(bcolors.HEADER + t + ' ' + str(len(entries)) + bcolors.ENDC)
+    print(bcolors.HEADER + '==============================' + bcolors.ENDC)
+    for e in entries_by_tags[t]:
+      e.print_detailed(print_tags=False)
+    print('\n')
+
+  print(bcolors.HEADER + '==============================' + bcolors.ENDC)
+  print(bcolors.HEADER + 'Remaining Tags' + bcolors.ENDC)
+  print(bcolors.HEADER + '==============================' + bcolors.ENDC)
+  for t in tags_:
+    if t[0] in entries_by_tags:
+      continue
+
+    entries = logger.log_entries_by_tag[t[0]]
+    dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
+    print('%s: %d (%s)' % (t[0], len(entries), dt))
+
 
 def process_query(args):
   query = ' '.join(args.command)
@@ -475,6 +489,9 @@ def process_query(args):
 
   if query == 'bak':
     return backup()
+
+  if query == 'overview':
+    return overview()
 
   if query == 'archive':
     logger = jlogger.Logger()

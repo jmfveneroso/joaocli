@@ -115,7 +115,7 @@ class Block:
     duration = abs(datetime.datetime.now() - date)
     return datetime.timedelta(seconds=duration.seconds)
 
-  def print_detailed(self):
+  def print_detailed(self, print_tags=True):
     if 'archive' in self.attributes:
       print('ARCHIVE: run "$ j archive"')
 
@@ -269,19 +269,20 @@ class LogEntry:
       return precedence[b1.type] - precedence[b2.type]
     self.blocks = sorted(self.blocks, key=functools.cmp_to_key(compare_fn))
 
-  def print_header(self):
+  def print_header(self, print_tags=True):
     print(
       bcolors.UNDERLINE + ('%08d' % self.id) + bcolors.ENDC,
       self.timestamp,
       bcolors.OKGREEN + self.title + bcolors.ENDC,
     )
 
-    if len(self.tags) > 0:
+    
+    if len(self.tags) > 0 and print_tags:
       print(bcolors.OKBLUE + ' '.join(self.tags) + bcolors.ENDC)
     print('')
 
-  def print_detailed(self):
-    self.print_header()
+  def print_detailed(self, print_tags=True):
+    self.print_header(print_tags)
     for b in self.blocks:
       b.print_detailed()
 
@@ -548,3 +549,53 @@ class Logger:
       if len(blocks) > 0:
         self.create_log_entry_from_blocks(e, blocks)
         e.log_file.rewrite()
+
+  def get_tags(self):
+    tags = {}
+    for e in self.log_entries:
+      for t in e.tags:
+        dt = e.timestamp
+
+        if not t in tags:
+          tags[t] = (dt, 0)
+        elif dt > tags[t][0]:
+          tags[t] = (dt, tags[t][1])
+        tags[t] = (tags[t][0], tags[t][1] + 1)
+
+    tags = [(t, tags[t][0], tags[t][1]) for t in tags]
+    return sorted(tags, key=lambda e : e[1], reverse=True)
+
+  def get_entries_from_last_week(self):
+    entries = []
+    d = datetime.datetime.now() - datetime.timedelta(days=7)
+    for e in reversed(self.log_entries):
+      if e.timestamp < d:
+        break
+      entries.append(e)
+    return entries
+
+  def get_important_entries_by_tag(self):
+    entries = self.get_entries_from_last_week()
+    print(str(len(entries)) + ' entries last week')
+
+    tagged_entries = [e for e in entries if len(e.tags) > 0]
+    print(str(len(tagged_entries)) + ' tagged entries last week')
+
+    tags_to_entries = {}
+    for e in tagged_entries:
+      for t in e.tags:
+        if not t in tags_to_entries:
+          tags_to_entries[t] = []
+        tags_to_entries[t].append(e)
+
+    def compare_fn(t1, t2):
+      return len(t2[1]) - len(t1[1])
+
+    tags_to_entries = [(k, v) for k, v in tags_to_entries.items()]
+    tags_to_entries = sorted(tags_to_entries, key=functools.cmp_to_key(compare_fn))
+
+    tags = {}
+    for t in tags_to_entries:
+      num_entries = round(10 * (len(t[1]) / float(len(tagged_entries))))
+      tags[t[0]] = t[1][:num_entries]
+    return {t: v for t, v in tags.items() if len(v) > 0}
