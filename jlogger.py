@@ -253,11 +253,14 @@ class LogEntry:
         self.parent = str(line[8:])
       elif line.startswith('+count='):
         self.count = int(line[7:])
-      elif line.startswith('+modified-at='):
-        self.modified_at = line[13:]
+      elif line.startswith('+modified-at '):
+        self.modified_at = datetime.datetime.strptime(line[13:], "%Y-%m-%d %H:%M:%S")
       else:
         break
       i += 1
+
+    if self.modified_at is None:
+      self.modified_at = self.timestamp
 
     while i < len(content):
       if len(content[i]) == 0:
@@ -285,6 +288,9 @@ class LogEntry:
         i += 1
       self.blocks.append(Block(self, block_content))
 
+  def set_modified_time(self, modified_at):
+    self.modified_at = modified_at
+
   def remove_block(self, block):
     for i in range(len(self.blocks)):
       if self.blocks[i] is block:
@@ -299,9 +305,14 @@ class LogEntry:
     self.blocks = sorted(self.blocks, key=functools.cmp_to_key(compare_fn))
 
   def print_header(self, print_tags=True):
+    date = self.modified_at if self.modified_at else self.timestamp
+
+    if self.modified_at != self.timestamp:
+      date = str(date) + bcolors.HEADER + ' (created at: %s)' % self.timestamp + bcolors.ENDC
+
     print(
       bcolors.UNDERLINE + ('%08d' % self.id) + bcolors.ENDC,
-      self.timestamp,
+      date,
       bcolors.OKGREEN + self.title + bcolors.ENDC,
     )
 
@@ -333,8 +344,12 @@ class LogEntry:
     s = (
       "{:08d} ".format(self.id) +
       "[%s] " % self.timestamp.strftime("%H:%M:%S") +
-      tags + ' ' + self.title.strip() + "\n\n"
+      tags + ' ' + self.title.strip() + "\n"
     )
+
+    if self.modified_at is not None:
+      s += '+modified-at %s\n' % self.modified_at.strftime("%Y-%m-%d %H:%M:%S")
+    s += '\n'
 
     for b in self.blocks:
       s += str(b) + '\n'
@@ -430,6 +445,7 @@ class Logger:
     dates.sort()
     for d in dates:
       self.get_log_entries(d)
+    self.log_entries.sort(key=lambda e: e.modified_at)
 
   def build_indices(self):
     for e in self.log_entries:
@@ -506,6 +522,10 @@ class Logger:
       f.write('\n'.join(str(b) for b in blocks))
 
   def edit_log_entry(self, entry):
+    now = datetime.datetime.now()
+    entry.set_modified_time(now)
+    entry.log_file.rewrite()
+
     filename = "log.%s.txt" % str(entry.log_file.date)
     path = os.path.join(data_path, filename)
 
