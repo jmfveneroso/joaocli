@@ -42,6 +42,35 @@ class bcolors:
   UNDERLINE = '\033[4m'
 
 
+class Tag:
+  def __init__(self, name, entries, score):
+    self.name = name
+    self.entries = entries
+    self.score = score
+
+  def print_header(self):
+    print(bcolors.HEADER + '======================================' + bcolors.ENDC)
+    print(bcolors.HEADER + '%s (%d entries) %.4f' %
+          (self.name, len(self.entries), self.score))
+    print(bcolors.HEADER + '======================================' + bcolors.ENDC)
+
+  def print_summary(self):
+    self.print_header()
+
+    entries_to_print = len(self.entries) // 5
+    if entries_to_print == 0:
+      entries_to_print = 1
+
+    for e in reversed(self.entries[-entries_to_print:]):
+      e.print_detailed(print_tags=False)
+    print('\n')
+
+  def print_snippet(self):
+    e = self.entries[0]
+    dt = datetime.datetime.strftime(e.timestamp, "%Y-%m-%d %H:%M:%S")
+    print('%s: %d (%s)' % (self.name, len(self.entries), dt))
+
+
 class Block:
   def __init__(self, parent, content):
     self.parent = parent
@@ -276,7 +305,6 @@ class LogEntry:
       bcolors.OKGREEN + self.title + bcolors.ENDC,
     )
 
-    
     if len(self.tags) > 0 and print_tags:
       print(bcolors.OKBLUE + ' '.join(self.tags) + bcolors.ENDC)
     print('')
@@ -565,17 +593,54 @@ class Logger:
     tags = [(t, tags[t][0], tags[t][1]) for t in tags]
     return sorted(tags, key=lambda e : e[1], reverse=True)
 
-  def get_entries_from_last_week(self):
+  def get_entries_from_date(self, period_start):
     entries = []
-    d = datetime.datetime.now() - datetime.timedelta(days=7)
     for e in reversed(self.log_entries):
-      if e.timestamp < d:
+      if e.timestamp < period_start:
         break
       entries.append(e)
     return entries
 
+  def days_since_date(self, period_start, date):
+    td = (date - period_start)
+    days = td.days + td.seconds / (3600.0 * 24.0)
+    return days
+
+  def get_spreadness(self, period_start, entries):
+    if len(entries) <= 1:
+      return 1
+
+    total_days = self.days_since_date(period_start, datetime.datetime.now())
+    step = total_days / float(len(entries))
+    expected = [i * step for i in range(0, len(entries))]
+    actual = [self.days_since_date(period_start, e.timestamp) for e in reversed(entries)]
+    diffs = [abs(x - y) for x, y in zip(actual, expected)]
+    return 1.0 / sum(diffs)
+
+  def get_entry_score(self, period_start, e):
+    num_tokens = len(e.get_tokens())
+
+    days = self.days_since_date(e.timestamp, datetime.datetime.now())
+    # print(days, )
+
+    alpha = 1
+    score = math.e ** -(alpha * days)
+    score *= math.log(1 + num_tokens / 30, 2)
+    return score
+
+  def tag_score(self, tag, entries, period_start):
+    scores = [self.get_entry_score(period_start, e) for e in entries]
+
+    spreadness = self.get_spreadness(period_start, entries)
+    score = sum(scores)
+    # TODO: do I want spreadness?
+    # score *= spreadness
+    return score
+
   def get_important_entries_by_tag(self):
-    entries = self.get_entries_from_last_week()
+    period_start = datetime.datetime.now() - datetime.timedelta(days=7)
+
+    entries = self.get_entries_from_date(period_start)
     print(str(len(entries)) + ' entries last week')
 
     tagged_entries = [e for e in entries if len(e.tags) > 0]
@@ -589,13 +654,17 @@ class Logger:
         tags_to_entries[t].append(e)
 
     def compare_fn(t1, t2):
-      return len(t2[1]) - len(t1[1])
+      # Rank by num entries.
+      # return len(t2[1]) - len(t1[1])
 
-    tags_to_entries = [(k, v) for k, v in tags_to_entries.items()]
+      # Rank by score.
+      return t2[2] - t1[2]
+
+    tags_to_entries = [(k, v, self.tag_score(k, v, period_start)) for k, v in tags_to_entries.items()]
     tags_to_entries = sorted(tags_to_entries, key=functools.cmp_to_key(compare_fn))
 
-    tags = {}
+    tags = []
     for t in tags_to_entries:
-      num_entries = round(10 * (len(t[1]) / float(len(tagged_entries))))
-      tags[t[0]] = t[1][:num_entries]
-    return {t: v for t, v in tags.items() if len(v) > 0}
+      tags.append(Tag(t[0], self.get_log_entries_by_tag(t[0]), t[2]))
+
+    return tags

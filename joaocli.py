@@ -392,28 +392,40 @@ def backup():
 
 def overview():
   logger = jlogger.Logger()
-  tags_ = logger.get_tags()
-
-  entries_by_tags = logger.get_important_entries_by_tag()
-  for t in entries_by_tags:
-    entries = logger.log_entries_by_tag[t]
-    print(bcolors.HEADER + '==============================' + bcolors.ENDC)
-    print(bcolors.HEADER + t + ' ' + str(len(entries)) + bcolors.ENDC)
-    print(bcolors.HEADER + '==============================' + bcolors.ENDC)
-    for e in entries_by_tags[t]:
-      e.print_detailed(print_tags=False)
-    print('\n')
+  tags = logger.get_important_entries_by_tag()
+  for t in tags:
+    t.print_summary()
 
   print(bcolors.HEADER + '==============================' + bcolors.ENDC)
   print(bcolors.HEADER + 'Remaining Tags' + bcolors.ENDC)
   print(bcolors.HEADER + '==============================' + bcolors.ENDC)
-  for t in tags_:
-    if t[0] in entries_by_tags:
+  tag_names = {t.name for t in tags}
+  for t in logger.get_tags():
+    if t[0] in tag_names:
       continue
 
     entries = logger.log_entries_by_tag[t[0]]
     dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
+
     print('%s: %d (%s)' % (t[0], len(entries), dt))
+
+
+def stats():
+  logger = jlogger.Logger()
+
+  token_counts = []
+  for e in logger.log_entries:
+    num_tokens = len(e.get_tokens())
+    token_counts.append(num_tokens)
+
+  mean = sum(token_counts) / len(token_counts)
+  dev = [(c - mean) ** 2 for c in token_counts]
+  stddev = math.sqrt(sum(dev) / len(token_counts))
+
+  print('Average tokens:', mean)
+  print('STD DEV tokens:', stddev)
+  print('Min tokens:', min(token_counts))
+  print('Max tokens:', max(token_counts))
 
 
 def process_query(args):
@@ -496,6 +508,9 @@ def process_query(args):
   if query == 'archive':
     logger = jlogger.Logger()
     return logger.archive()
+
+  if query == 'stats':
+    return stats()
 
   if query == 'checkpoint':
     titles = get_titles()
