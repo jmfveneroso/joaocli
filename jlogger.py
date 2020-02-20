@@ -57,152 +57,16 @@ class Tag:
   def print_summary(self):
     self.print_header()
 
-    entries_to_print = len(self.entries) // 5
-    if entries_to_print == 0:
-      entries_to_print = 1
-
-    for e in reversed(self.entries[-entries_to_print:]):
-      e.print_detailed(print_tags=False)
+    entries_to_print = 3
+    self.entries[-1].print_detailed(print_tags=False)
+    for e in reversed(self.entries[-entries_to_print:-1]):
+      e.print_summarized(print_tags=False)
     print('\n')
 
   def print_snippet(self):
     e = self.entries[0]
     dt = datetime.datetime.strftime(e.timestamp, "%Y-%m-%d %H:%M:%S")
     print('%s: %d (%s)' % (self.name, len(self.entries), dt))
-
-
-class Block:
-  def __init__(self, parent, content):
-    self.parent = parent
-    self.type = ''
-    self.title = ''
-    self.content = []
-    self.attributes = {}
-
-    self.init_block(content)
-
-  def archive(self):
-    return 'archive' in self.attributes
-
-  def parse_content(self, content):
-    i = 0
-    while i < len(content):
-      line = content[i]
-      if line.startswith('%'):
-        key = line[1:] if line.find(' ') == -1 else line[1:line.find(' ')]
-        value = line[2+len(key):]
-        self.attributes[key] = value
-        i += 1
-      else:
-        break
-    self.content = content[i:]
-
-  def init_block(self, content):
-    if len(content) == 0:
-      return
-
-    if content[0].startswith('[ ]'):
-      self.type = 'TASK'
-      self.title = content[0][3:].strip()
-      self.parse_content(content[1:])
-      return
-
-    if content[0].startswith('[x]'):
-      self.type = 'COMPLETE_TASK'
-      self.title = content[0][3:].strip()
-      self.parse_content(content[1:])
-      return
-
-    if content[0].startswith('+'):
-      self.type = 'COMMAND'
-      self.title = content[0][1:].strip()
-      self.parse_content(content[1:])
-      return
-
-    self.type = 'TEXT'
-    self.parse_content(content)
-
-  def print_command(self, command):
-    if command == 'progress':
-      num_tasks, num_complete_tasks = 0, 0
-      for b in self.parent.blocks:
-        if b.type == 'COMPLETE_TASK':
-          num_complete_tasks += 1
-          num_tasks += 1
-        if b.type == 'TASK':
-          num_tasks += 1
-
-      progress_bar_size = 20
-      progress = num_complete_tasks / num_tasks
-      ticks = round(progress_bar_size * progress)
-      progress_bar = '[' + '=' * ticks + ' ' * (progress_bar_size - ticks) + ']';
-      print('Progress: %s %s (%d of %d tasks)' %
-            (progress_bar, "{0:.0%}".format(progress),
-             num_complete_tasks, num_tasks))
-
-  def get_elapsed_time(self, date):
-    duration = abs(datetime.datetime.now() - date)
-    return datetime.timedelta(seconds=duration.seconds)
-
-  def print_detailed(self, print_tags=True):
-    if 'archive' in self.attributes:
-      print('ARCHIVE: run "$ j archive"')
-
-    if self.type == 'TASK' or self.type == 'COMPLETE_TASK':
-      if self.type == 'TASK':
-        print('[ ] %s' % self.title)
-      else:
-        print('[x] %s' % self.title)
-
-      creation_date = None
-      finish_date = None
-      if 'created-at' in self.attributes:
-        creation_date = datetime.datetime.strptime(
-            self.attributes['created-at'], '%Y-%m-%d %H:%M:%S')
-
-        elapsed_time = self.get_elapsed_time(creation_date)
-        print('Created at: %s (%s)' % (creation_date, elapsed_time))
-
-      if 'finished-at' in self.attributes:
-        finish_date = datetime.datetime.strptime(
-            self.attributes['finished-at'], '%Y-%m-%d %H:%M:%S')
-
-        time_to_complete = 0
-        if 'created-at' in self.attributes:
-          time_to_complete = abs(finish_date - creation_date)
-        time_to_complete = datetime.timedelta(seconds=time_to_complete.seconds)
-        print('Finished at: %s (%s)' % (finish_date, time_to_complete))
-
-    if self.type == 'COMMAND':
-      self.print_command(self.title)
-
-    print('\n'.join(self.content))
-
-  def print_summarized(self):
-    if self.type == 'TEXT':
-      print('\n'.join(self.content))
-
-  def get_tokens(self):
-    tokens = []
-    for l in self.content:
-      tokens += tokenize(l)
-    return tokens
-
-  def __str__(self):
-    s = ''
-    if self.type == 'TASK':
-      s += '[ ] %s' % self.title + '\n'
-
-    if self.type == 'COMPLETE_TASK':
-      s += '[x] %s' % self.title + '\n'
-
-    if self.type == 'COMMAND':
-      s += '+%s' % self.title + '\n'
-
-    for attr in self.attributes:
-      s += '%' + attr + ' ' + self.attributes[attr]
-    s += '\n'.join(self.content)
-    return s
 
 
 class LogEntry:
@@ -221,11 +85,10 @@ class LogEntry:
     self.parent = ''
     self.chronos = []
 
-    self.blocks = []
+    self.content = []
 
     self.parse_header(header)
     self.parse_content(content)
-    # self.sort_blocks()
 
   def parse_header(self, header):
     tags = []
@@ -236,10 +99,6 @@ class LogEntry:
       tags = match.group()[1:-1].lower().split(',')
       self.tags = [t.strip() for t in tags]
       self.title = header[match.span()[1]:]
-
-  def is_block_start(self, s):
-    prefixes = ['[ ]', '[x]', '+']
-    return any([s.startswith(p) for p in prefixes])
 
   def parse_content(self, content):
     i = 0
@@ -263,46 +122,11 @@ class LogEntry:
       self.modified_at = self.timestamp
 
     while i < len(content):
-      if len(content[i]) == 0:
-        i += 1
-        continue
-
-      found_empty_line = False
-      block_content = [content[i]]
+      self.content.append(content[i])
       i += 1
-      while i < len(content):
-        line = content[i]
-        if len(line) == 0:
-          if found_empty_line:
-            break
-
-          found_empty_line = True
-          block_content.append(line)
-          i += 1
-          continue
-        elif self.is_block_start(line):
-          break
-
-        found_empty_line = False
-        block_content.append(line)
-        i += 1
-      self.blocks.append(Block(self, block_content))
 
   def set_modified_time(self, modified_at):
     self.modified_at = modified_at
-
-  def remove_block(self, block):
-    for i in range(len(self.blocks)):
-      if self.blocks[i] is block:
-        del self.blocks[i]
-        break
-    block.parent = None
-
-  def sort_blocks(self):
-    def compare_fn(b1, b2):
-      precedence = { 'TASK': 0, 'COMMAND': 1, 'TEXT': 1, 'COMPLETE_TASK': 2 }
-      return precedence[b1.type] - precedence[b2.type]
-    self.blocks = sorted(self.blocks, key=functools.cmp_to_key(compare_fn))
 
   def print_header(self, print_tags=True):
     date = self.modified_at if self.modified_at else self.timestamp
@@ -322,18 +146,18 @@ class LogEntry:
 
   def print_detailed(self, print_tags=True):
     self.print_header(print_tags)
-    for b in self.blocks:
-      b.print_detailed()
+    for l in self.content:
+      print(l)
 
-  def print_summarized(self):
-    self.print_header()
-    for b in self.blocks:
-      b.print_summarized()
+  def print_summarized(self, print_tags=True):
+    self.print_header(print_tags)
+    for l in self.content[:5]:
+      print(l)
 
   def get_tokens(self):
     tokens = tokenize(self.title)
-    for b in self.blocks:
-      tokens += b.get_tokens()
+    for l in self.content:
+      tokens += tokenize(l)
     return tokens
 
   def __str__(self):
@@ -349,10 +173,9 @@ class LogEntry:
 
     if self.modified_at is not None:
       s += '+modified-at %s\n' % self.modified_at.strftime("%Y-%m-%d %H:%M:%S")
-    s += '\n'
 
-    for b in self.blocks:
-      s += str(b) + '\n'
+    for l in self.content:
+      s += l + '\n'
 
     return s
 
@@ -430,7 +253,7 @@ class Logger:
           if match is not None:
             break
 
-          content.append(lines[i].strip())
+          content.append(lines[i].rstrip())
           i += 1
 
         new_entry = LogEntry(log_file, entry_id, timestamp, header, content)
@@ -505,22 +328,6 @@ class Logger:
       ['vim', '+normal G$', log_file.get_path()]
     )
 
-  def create_log_entry_from_blocks(self, parent, blocks):
-    log_file = self.get_current_log_file()
-
-    current_id = None
-    with open(os.path.join(data_path, 'id.txt'), 'r') as f:
-      current_id = int(f.read().strip())
-    with open(os.path.join(data_path, 'id.txt'), 'w') as f:
-      f.write(str(int(current_id) + 1))
-
-    with open(log_file.get_path(), 'a') as f:
-      n = datetime.datetime.now()
-      f.write("\n")
-      f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
-      f.write("Archived Block from %s\n\n" % parent.title)
-      f.write('\n'.join(str(b) for b in blocks))
-
   def edit_log_entry(self, entry):
     now = datetime.datetime.now()
     entry.set_modified_time(now)
@@ -585,18 +392,6 @@ class Logger:
       n -= 1
       if n == 0:
         break
-
-  def archive(self):
-    for e in self.log_entries:
-      blocks = []
-      for b in e.blocks:
-        if b.archive():
-          blocks.append(b)
-          e.remove_block(b)
-
-      if len(blocks) > 0:
-        self.create_log_entry_from_blocks(e, blocks)
-        e.log_file.rewrite()
 
   def get_tags(self):
     tags = {}
@@ -682,6 +477,8 @@ class Logger:
 
     tags_to_entries = [(k, v, self.tag_score(k, v, period_start)) for k, v in tags_to_entries.items()]
     tags_to_entries = sorted(tags_to_entries, key=functools.cmp_to_key(compare_fn))
+
+    tags_to_entries = tags_to_entries[:3]
 
     tags = []
     for t in tags_to_entries:

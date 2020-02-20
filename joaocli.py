@@ -390,6 +390,7 @@ def backup():
     print("Copied from %s to %s" % (source_suffix, dest_suffix))
   print("Finished backup")
 
+
 def overview():
   logger = jlogger.Logger()
   tags = logger.get_important_entries_by_tag()
