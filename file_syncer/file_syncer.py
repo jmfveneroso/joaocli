@@ -243,6 +243,14 @@ class FileSyncer():
         f.write(fh.getbuffer())
     logger.info('Updating local metadata.json')
 
+  # This is necessary because the Android app was yielding a fatal error when
+  # downloading empty files.
+  def remove_empty_local_files(self):
+    for f in os.listdir(self.dir_path):
+      if os.stat(os.path.join(self.dir_path, f)).st_size == 0:
+        os.remove(os.path.join(self.dir_path, f))
+        logger.info('Removed empty file %s' % f)
+
   def sync_remote_based_on_local(self, dry_run=False):
     logger.info('Syncing remote based on local')
     local_metadata = self.update_local_metadata(dry_run)
@@ -305,6 +313,9 @@ class FileSyncer():
 
     if dry_run:
       logger.info('Dry run')
+    else:
+      self.remove_empty_local_files()
+    self.remove_empty_local_files()
 
     # self.ensure_remote_consistency(dry_run)
     local_metadata = self.get_local_metadata()
