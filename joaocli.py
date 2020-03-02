@@ -379,9 +379,15 @@ def backup():
   print("Finished backup")
 
 
-def overview():
+def overview(tag_name=None):
   logger = jlogger.Logger()
-  tags = logger.get_tags()
+
+  tags = []
+  if tag_name:
+    tags = logger.tags[tag_name].get_child_tags()
+  else:
+    tags = logger.get_tags()
+
   for t in tags[:5]:
     t.print_summary()
 
@@ -486,7 +492,9 @@ def process_query(args):
   if query == 'bak':
     return backup()
 
-  if query == 'overview':
+  if args.command[0] == 'overview':
+    if len(args.command) > 1:
+      return overview(args.command[1])
     return overview()
 
   if query == 'archive':
@@ -495,6 +503,10 @@ def process_query(args):
 
   if query == 'stats':
     return stats()
+
+  if query == 'hier':
+    logger = jlogger.Logger()
+    return logger.print_tag_hierarchy()
 
   if query == 'checkpoint':
     titles = get_titles()

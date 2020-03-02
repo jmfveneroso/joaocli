@@ -62,9 +62,28 @@ class Tag:
   def __init__(self, name, entries):
     self.name = name
     self.entries = entries
-    self.modified_at = entries[-1].modified_at
+
+    self.modified_at = datetime.datetime(year=1970, month=1, day=1)
+    if self.entries:
+      self.modified_at = entries[-1].modified_at
+
     self.common_words = []
     self.calculate_stats()
+    self.children = []
+    self.parent = None
+
+  def get_child_tags(self):
+    tags = []
+
+    queue = [self]
+    while queue:
+      current = queue[-1]
+      queue.pop()
+      tags.append(current)
+      queue += current.children
+
+    tags.sort(key=lambda t: t.modified_at, reverse=True)
+    return tags
 
   def print_header(self):
     print(bcolors.HEADER + '======================================' + bcolors.ENDC)
@@ -77,7 +96,10 @@ class Tag:
     self.print_header()
 
     entries_to_print = 3
-    self.entries[-1].print_detailed(print_tags=False)
+
+    if self.entries:
+      self.entries[-1].print_detailed(print_tags=False)
+
     for e in reversed(self.entries[-entries_to_print:-1]):
       e.print_summarized(print_tags=False)
     print('\n')
@@ -259,9 +281,12 @@ class Logger:
     self.log_entries_by_title = {}
     self.log_entries_by_tag = {}
     self.log_files_by_date = {}
+    self.main_tag = None
+    self.tags = {}
 
     self.load_log_files()
     self.build_indices()
+    self.load_tag_hierarchy()
 
   def get_log_entries(self, date):
     with open(os.path.join(data_path, "log.%s.txt" % date)) as f:
@@ -434,6 +459,43 @@ class Logger:
         break
 
   def get_tags(self):
-    tags = [Tag(t, self.log_entries_by_tag[t]) for t in self.log_entries_by_tag]
+    tags = list(self.tags.values())
     tags.sort(key=lambda t: t.modified_at, reverse=True)
     return tags
+
+  def print_tag_hierarchy(self, tag=None, indents=0):
+    if tag is None:
+      tag = self.main_tag
+
+    print('  ' * indents + tag.name)
+    for c in tag.children:
+      self.print_tag_hierarchy(c, indents + 1)
+
+  def load_tag_hierarchy(self):
+    self.main_tag = Tag('main', [])
+    stack = [self.main_tag]
+
+    cur_indents = -1
+    with open(os.path.join(data_path, 'tags.txt'), 'r') as f:
+      for line in f:
+        num_spaces = 0
+        for i in range(len(line)):
+          if line[i] != ' ':
+            break
+          num_spaces += 1
+        num_indents = num_spaces / 2
+
+        tag_name = line[num_spaces:].strip()
+        entries = []
+        if tag_name in self.log_entries_by_tag:
+          entries = self.log_entries_by_tag[tag_name]
+        cur_tag = Tag(tag_name, entries)
+        self.tags[tag_name] = cur_tag
+
+        while cur_indents >= num_indents:
+          stack.pop()
+          cur_indents -= 1
+
+        stack[-1].children.append(cur_tag)
+        cur_indents = num_indents
+        stack.append(cur_tag)
