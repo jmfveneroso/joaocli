@@ -130,34 +130,22 @@ def process_knowledge_piece(q):
   print(kp['text'])
   return True
 
-def tknize(s):
-  tkns = re.compile("\s+|[:=(),.'?]").split(s)
-  return [t for t in tkns if len(t) > 0]
-
 def vocab():
   words = []
   kps = load_knowledge()
   for key in kps:
-    words += tknize(key)
-    words += tknize(kps[key]['text'])
+    words += jlogger.tokenize(key)
+    words += jlogger.tokenize(kps[key]['text'])
 
   logger = jlogger.Logger()
   for e in logger.log_entries:
     words += e.get_tokens()
-  words = [w.lower() for w in words]
+  words = [w for w in words]
 
   with open(os.path.join(data_path, 'vocab.txt'), 'w') as f:
     counter = Counter(words)
     for w in counter.most_common():
       f.write(w[0] + ' ' + str(w[1]) + '\n')
-
-def load_vocab():
-  v = {}
-  with open(os.path.join(data_path, 'vocab.txt'), 'r') as f:
-    for line in f:
-      arr = line.split()
-      v[arr[0]] = int(arr[1])
-  return v
 
 def seconds_since_midnight(date):
   midnight = date.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -277,14 +265,14 @@ def try_exact_match(logger, q):
 def search(q, show_all=False):
   logger = jlogger.Logger()
 
-  v = load_vocab()
-  tkns = tknize(q)
+  v = jlogger.load_vocab()
+  tkns = jlogger.tokenize(q)
 
   if try_exact_match(logger, tkns[0].lower()):
     return
 
   tkns = [get_closest_word(t, v) for t in tkns]
-  tkn_set = { t.lower() for t in tkns }
+  tkn_set = { t for t in tkns }
 
   scored_entries = []
   for e in reversed(logger.log_entries):
@@ -360,8 +348,8 @@ def tags():
   logger = jlogger.Logger()
   tags = logger.get_tags()
   for t in tags:
-    dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
-    print("%s (%d): %s" % (t[0], t[2], dt))
+    dt = datetime.datetime.strftime(t.modified_at, "%Y-%m-%d %H:%M:%S")
+    print("%s (%d): %s" % (t.name, len(t.entries), dt))
 
 def backup():
   print("Starting backup")
@@ -393,22 +381,17 @@ def backup():
 
 def overview():
   logger = jlogger.Logger()
-  tags = logger.get_important_entries_by_tag()
-  for t in tags:
+  tags = logger.get_tags()
+  for t in tags[:5]:
     t.print_summary()
 
   print(bcolors.HEADER + '==============================' + bcolors.ENDC)
   print(bcolors.HEADER + 'Remaining Tags' + bcolors.ENDC)
   print(bcolors.HEADER + '==============================' + bcolors.ENDC)
   tag_names = {t.name for t in tags}
-  for t in logger.get_tags():
-    if t[0] in tag_names:
-      continue
-
-    entries = logger.log_entries_by_tag[t[0]]
-    dt = datetime.datetime.strftime(t[1], "%Y-%m-%d %H:%M:%S")
-
-    print('%s: %d (%s)' % (t[0], len(entries), dt))
+  for t in tags[5:]:
+    dt = datetime.datetime.strftime(t.modified_at, "%Y-%m-%d %H:%M:%S")
+    print('%s: %d (%s)' % (t.name, len(t.entries), dt))
 
 
 def stats():

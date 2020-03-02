@@ -26,9 +26,25 @@ data_path = os.path.join(dir_path, 'files')
 orig_settings = termios.tcgetattr(sys.stdin)
 
 
+def load_vocab():
+  v = {}
+  with open(os.path.join(data_path, 'vocab.txt'), 'r') as f:
+    for line in f:
+      arr = line.split()
+      v[arr[0]] = int(arr[1])
+  return v
+
+
 def tokenize(s):
-  tkns = re.compile("\s+|[:=(),.'?]").split(s)
-  return [t.lower() for t in tkns if len(t) > 0]
+  tkns = re.compile("\s+").split(s)
+  good_tkns = []
+  for t in tkns:
+    # Check if it is a URL.
+    if re.match('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\), ]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', t) is not None:
+      good_tkns.append(t)
+      continue
+    good_tkns += re.compile("\s+|[:=(),.'?]").split(t.lower())
+  return [t for t in good_tkns if len(t) > 0]
 
 
 class bcolors:
@@ -43,15 +59,18 @@ class bcolors:
 
 
 class Tag:
-  def __init__(self, name, entries, score):
+  def __init__(self, name, entries):
     self.name = name
     self.entries = entries
-    self.score = score
+    self.modified_at = entries[-1].modified_at
+    self.common_words = []
+    self.calculate_stats()
 
   def print_header(self):
     print(bcolors.HEADER + '======================================' + bcolors.ENDC)
-    print(bcolors.HEADER + '%s (%d entries) %.4f' %
-          (self.name, len(self.entries), self.score))
+    print(bcolors.HEADER + '%s (%d entries)' %
+          (self.name, len(self.entries)))
+    print(' '.join(['%s (%d %.2f)' % w for w in self.common_words][:5]))
     print(bcolors.HEADER + '======================================' + bcolors.ENDC)
 
   def print_summary(self):
@@ -67,6 +86,22 @@ class Tag:
     e = self.entries[0]
     dt = datetime.datetime.strftime(e.timestamp, "%Y-%m-%d %H:%M:%S")
     print('%s: %d (%s)' % (self.name, len(self.entries), dt))
+
+  def calculate_stats(self):
+    words = []
+    for e in self.entries:
+      words += e.get_tokens()
+
+    self.common_words = []
+    v = load_vocab()
+    counter = Counter([w for w in words])
+    for w in counter.most_common():
+      if w[0] in v:
+        score = w[1] # TF
+        score *= math.log2(1 + w[1] / v[w[0]]) # IDF
+        self.common_words.append((w[0], w[1], score))
+
+    self.common_words = sorted(self.common_words, key=lambda e : e[2], reverse=True)
 
 
 class LogEntry:
@@ -319,10 +354,15 @@ class Logger:
     with open(os.path.join(data_path, 'id.txt'), 'w') as f:
       f.write(str(int(current_id) + 1))
 
+    # Try to infer tag.
+    tag_name = self.get_tags()[0].name
+
     with open(log_file.get_path(), 'a') as f:
       n = datetime.datetime.now()
       f.write("\n")
-      f.write("{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S"))
+      s = "{:08d} ".format(current_id) + "[%s]" % n.strftime("%H:%M:%S")
+      s += " (%s)" % tag_name
+      f.write(s)
 
     subprocess.run(
       ['vim', '+normal G$', log_file.get_path()]
@@ -394,94 +434,6 @@ class Logger:
         break
 
   def get_tags(self):
-    tags = {}
-    for e in self.log_entries:
-      for t in e.tags:
-        dt = e.timestamp
-
-        if not t in tags:
-          tags[t] = (dt, 0)
-        elif dt > tags[t][0]:
-          tags[t] = (dt, tags[t][1])
-        tags[t] = (tags[t][0], tags[t][1] + 1)
-
-    tags = [(t, tags[t][0], tags[t][1]) for t in tags]
-    return sorted(tags, key=lambda e : e[1], reverse=True)
-
-  def get_entries_from_date(self, period_start):
-    entries = []
-    for e in reversed(self.log_entries):
-      if e.timestamp < period_start:
-        break
-      entries.append(e)
-    return entries
-
-  def days_since_date(self, period_start, date):
-    td = (date - period_start)
-    days = td.days + td.seconds / (3600.0 * 24.0)
-    return days
-
-  def get_spreadness(self, period_start, entries):
-    if len(entries) <= 1:
-      return 1
-
-    total_days = self.days_since_date(period_start, datetime.datetime.now())
-    step = total_days / float(len(entries))
-    expected = [i * step for i in range(0, len(entries))]
-    actual = [self.days_since_date(period_start, e.timestamp) for e in reversed(entries)]
-    diffs = [abs(x - y) for x, y in zip(actual, expected)]
-    return 1.0 / sum(diffs)
-
-  def get_entry_score(self, period_start, e):
-    num_tokens = len(e.get_tokens())
-
-    days = self.days_since_date(e.timestamp, datetime.datetime.now())
-    # print(days, )
-
-    alpha = 1
-    score = math.e ** -(alpha * days)
-    score *= math.log(1 + num_tokens / 30, 2)
-    return score
-
-  def tag_score(self, tag, entries, period_start):
-    scores = [self.get_entry_score(period_start, e) for e in entries]
-
-    spreadness = self.get_spreadness(period_start, entries)
-    score = sum(scores)
-    # TODO: do I want spreadness?
-    # score *= spreadness
-    return score
-
-  def get_important_entries_by_tag(self):
-    period_start = datetime.datetime.now() - datetime.timedelta(days=7)
-
-    entries = self.get_entries_from_date(period_start)
-    print(str(len(entries)) + ' entries last week')
-
-    tagged_entries = [e for e in entries if len(e.tags) > 0]
-    print(str(len(tagged_entries)) + ' tagged entries last week')
-
-    tags_to_entries = {}
-    for e in tagged_entries:
-      for t in e.tags:
-        if not t in tags_to_entries:
-          tags_to_entries[t] = []
-        tags_to_entries[t].append(e)
-
-    def compare_fn(t1, t2):
-      # Rank by num entries.
-      # return len(t2[1]) - len(t1[1])
-
-      # Rank by score.
-      return t2[2] - t1[2]
-
-    tags_to_entries = [(k, v, self.tag_score(k, v, period_start)) for k, v in tags_to_entries.items()]
-    tags_to_entries = sorted(tags_to_entries, key=functools.cmp_to_key(compare_fn))
-
-    tags_to_entries = tags_to_entries[:3]
-
-    tags = []
-    for t in tags_to_entries:
-      tags.append(Tag(t[0], self.get_log_entries_by_tag(t[0]), t[2]))
-
+    tags = [Tag(t, self.log_entries_by_tag[t]) for t in self.log_entries_by_tag]
+    tags.sort(key=lambda t: t.modified_at, reverse=True)
     return tags
