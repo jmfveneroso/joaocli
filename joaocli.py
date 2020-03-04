@@ -249,10 +249,8 @@ def try_exact_match(logger, q):
   except ValueError:
     pass
 
-  entries = logger.get_log_entries_by_tag(q)
-  if entries:
-    for e in entries:
-      e.print_detailed()
+  if q in logger.tags:
+    logger.tags[q].print_detailed()
     return True
 
   # TODO: fix chrono.
@@ -268,14 +266,21 @@ def search(q, show_all=False):
   v = jlogger.load_vocab()
   tkns = jlogger.tokenize(q)
 
-  if try_exact_match(logger, tkns[0].lower()):
-    return
+  if len(tkns) == 1:
+    if try_exact_match(logger, tkns[0].lower()):
+      return
+
+  if tkns[0] in logger.tags:
+    entries = logger.tags[tkns[0]].get_entries()
+    tkns = tkns[1:]
+  else:
+    entries = logger.log_entries
 
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t for t in tkns }
 
   scored_entries = []
-  for e in reversed(logger.log_entries):
+  for e in reversed(entries):
     words = e.get_tokens()
 
     score = 0
@@ -293,8 +298,6 @@ def search(q, show_all=False):
   scored_entries = [e for e in scored_entries if e[0] > 0.0]
   for i in range(len(scored_entries)):
     e = scored_entries[i][1]
-    # if e['count'] > 0:
-    #   scored_entries[i][0] += e['count']
 
   scored_entries = sorted(scored_entries, key=lambda e : e[0], reverse=True)
 
@@ -329,8 +332,6 @@ def search(q, show_all=False):
     elif pressed_key == 'k':
       cursor = cursor - 1 if cursor > 0 else cursor
     elif pressed_key == chr(10):
-      # TODO: increase count.
-      # jlogger.log_message_increase_count(entry[1]['id'])
       sync(dry_run=False, verbose=True)
       return
     elif pressed_key == 'q':

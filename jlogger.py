@@ -85,6 +85,12 @@ class Tag:
     tags.sort(key=lambda t: t.modified_at, reverse=True)
     return tags
 
+  def get_entries(self):
+    entries = []
+    for t in self.get_child_tags():
+      entries += t.entries
+    return entries
+
   def print_header(self):
     print(bcolors.HEADER + '======================================' + bcolors.ENDC)
     print(bcolors.HEADER + '%s (%d entries)' %
@@ -105,9 +111,21 @@ class Tag:
     print('\n')
 
   def print_snippet(self):
-    e = self.entries[0]
-    dt = datetime.datetime.strftime(e.timestamp, "%Y-%m-%d %H:%M:%S")
+    dt = 'no entries'
+    if self.entries:
+      e = self.entries[0]
+      dt = datetime.datetime.strftime(e.timestamp, "%Y-%m-%d %H:%M:%S")
     print('%s: %d (%s)' % (self.name, len(self.entries), dt))
+
+  def print_detailed(self):
+    tags = self.get_child_tags()
+
+    for t in tags:
+      print('============================================')
+      t.print_snippet()
+      print('============================================')
+      for e in t.entries:
+        e.print_detailed()
 
   def calculate_stats(self):
     words = []
