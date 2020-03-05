@@ -1,0 +1,6 @@
+requests
+psycopg2-binary
+django-webpack-loader
+Django
+Sphinx
+sphinx-js

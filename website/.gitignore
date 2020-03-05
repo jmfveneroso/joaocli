@@ -1,0 +1,7 @@
+*.swp
+*.pyc
+data
+frontend/node_modules
+frontend/webpack-stats.json
+frontend/webpack-stats.dev.json
+cache/*

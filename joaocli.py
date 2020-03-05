@@ -332,7 +332,6 @@ def search(q, show_all=False):
     elif pressed_key == 'k':
       cursor = cursor - 1 if cursor > 0 else cursor
     elif pressed_key == chr(10):
-      sync(dry_run=False, verbose=True)
       return
     elif pressed_key == 'q':
       return

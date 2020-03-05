@@ -1,0 +1,30 @@
+version: '2'
+
+services:
+  db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+  web:
+    image: web
+    build: .
+    command: bash start.sh
+    env_file:
+      - .env
+    volumes:
+      - .:/code
+    ports:
+      - "80:80"
+      - "3000:3000"
+    depends_on:
+      - db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
