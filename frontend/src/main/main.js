@@ -4,9 +4,13 @@ import {Container} from 'reactstrap';
 
 function LogEntry(props) {
   return (
-    <div class="log-entry">
-      <div class="title">{props.entry.title}</div>
-      <div class="content">{props.entry.content}</div>
+    <div className="log-entry">
+      <div className="title">{props.entry.title}</div>
+      <div className="content">
+        {props.entry.content.split('\n').map(i => {
+          return <p>{i}</p>
+        })}
+      </div>
     </div>
   );
 }
@@ -35,15 +39,19 @@ class Main extends Component {
 
   render() {
     let entries = this.state.entries
+    // <Container fluid>
+    // </Container>
     return (
       <div className="app">
         <div className="app-body">
           <main className="main">
-            <Container fluid>
-              {entries.map(entry => {
-                return <LogEntry entry={entry} />;
-              })}
-            </Container>
+            <div className="wrapper">
+              <div className="horizontal-scroll">
+                {entries.map(entry => {
+                  return <LogEntry entry={entry} />;
+                })}
+              </div>
+            </div>
           </main>
         </div>
       </div>
