@@ -1,0 +1,14 @@
+// Here you can add other styles
+
+body {
+  font-family: monospace;
+}
+
+.log-entry {
+  .title {
+    font-weight: bold;
+  }
+  border: 1px solid black;
+  margin: 15px auto;
+  padding: 5px 10px;
+}

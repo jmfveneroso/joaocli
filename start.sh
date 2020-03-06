@@ -5,17 +5,17 @@
 echo 'Starting server'
 
 # Start webpack server.
-if [[ $DEBUG == *1* ]]; then
-  cd frontend
-  npm install
-  npm run start &
-  cd ..
-fi
-
+# if [[ $DEBUG == *1* ]]; then
 cd frontend
 npm install
-npm run build
+npm run start &
 cd ..
+# fi
+
+# cd frontend
+# npm install
+# npm run build
+# cd ..
 
 # Tries to start server 10 times.
 COUNT=0
