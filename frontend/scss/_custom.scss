@@ -8,21 +8,32 @@ p {
   margin-bottom: 3px;
 }
 
-.wrapper {
-  overflow-x: scroll;
-}
-
-.horizontal-scroll {
-  width: 400000px;
-}
-
 .log-entry {
-  .title {
-    font-weight: bold;
-  }
   border: 1px solid black;
   margin: 15px 15px;
   padding: 5px 10px;
-  display: inline-block;
-  vertical-align:top;
+
+  .title {
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .modified-at {
+    color: #197676;
+  }
+  .created-at {
+    color: #004bff;
+  }
+  .tags {
+    color: #810b46;
+  }
+
+  textarea {
+    background: transparent;
+    resize: none;
+    border: none;
+    outline: none;
+    width: 100%;
+    overflow: hidden;
+  }
 }
+

@@ -1,18 +1,35 @@
 import React, {Component} from 'react';
 import {Link, Switch, Route, Redirect} from 'react-router-dom';
-import {Container} from 'reactstrap';
+import {Container, Row} from 'reactstrap';
 
 function LogEntry(props) {
   return (
     <div className="log-entry">
       <div className="title">{props.entry.title}</div>
+      <div className="timestamp">
+        <span className="modified-at">
+          M: {props.entry.modified_at}
+        </span>
+        &nbsp;
+        <span className="created-at">
+          C: {props.entry.created_at}
+        </span>
+      </div>
+      <div className="tags">
+          {props.entry.tags}
+      </div>
       <div className="content">
-        {props.entry.content.split('\n').map(i => {
-          return <p>{i}</p>
-        })}
+        <textarea>{props.entry.content}</textarea>
       </div>
     </div>
   );
+  //      {props.entry.content.split('\n').map(i => {
+  //        return (
+  //          <textarea>
+  //            {i}
+  //          </textarea>
+  //        );
+  //      })}
 }
 
 class Main extends Component {
@@ -39,19 +56,13 @@ class Main extends Component {
 
   render() {
     let entries = this.state.entries
-    // <Container fluid>
-    // </Container>
     return (
       <div className="app">
         <div className="app-body">
           <main className="main">
-            <div className="wrapper">
-              <div className="horizontal-scroll">
-                {entries.map(entry => {
-                  return <LogEntry entry={entry} />;
-                })}
-              </div>
-            </div>
+            {entries.map(entry => {
+              return <LogEntry entry={entry} />;
+            })}
           </main>
         </div>
       </div>
