@@ -11,9 +11,8 @@ function LogEntry(props) {
 
   return (
     <div className="log-entry">
-      <Link to={`/log-entry/${props.entry.id}`} className="title">
-        <span>{props.entry.id} -</span> {props.entry.title}
-      </Link>
+      <Link to="/log-entry" className="title"
+            params={{ id: props.entry.id }}>{props.entry.title}</Link>
       <div className="timestamp">
         <span className="modified-at">
           M: {props.entry.modified_at}
@@ -77,6 +76,9 @@ class Main extends Component {
           {entries.map(entry => {
             return <LogEntry entry={entry} />;
           })}
+        </div>
+        <div>
+          <CodeMirror value="xxx yyy zzz" />
         </div>
       </div>
     );
