@@ -3,6 +3,10 @@ import {Link, Switch, Route, Redirect} from 'react-router-dom';
 import {Container, Row} from 'reactstrap';
 
 function LogEntry(props) {
+  function emitChange(){
+    console.log('just who');
+  }
+
   return (
     <div className="log-entry">
       <div className="title">{props.entry.title}</div>
@@ -19,23 +23,22 @@ function LogEntry(props) {
           {props.entry.tags}
       </div>
       <div className="content">
-        <textarea>{props.entry.content}</textarea>
+        {props.entry.content.split('\n').map(i => {
+          return (
+            <p html={i} onInput={emitChange} onBlur={emitChange} contentEditable>{i}</p>
+          );
+        })}
       </div>
     </div>
   );
-  //      {props.entry.content.split('\n').map(i => {
-  //        return (
-  //          <textarea>
-  //            {i}
-  //          </textarea>
-  //        );
-  //      })}
 }
 
 class Main extends Component {
   constructor(props) {
     super(props);
-    this.state = {entries: []};
+    this.state = {
+      entries: [],
+    };
   }
 
   componentDidMount() {
@@ -56,14 +59,20 @@ class Main extends Component {
 
   render() {
     let entries = this.state.entries
+    let options = {
+      lineNumbers: true,
+    }
+
     return (
       <div className="app">
         <div className="app-body">
           <main className="main">
-            {entries.map(entry => {
-              return <LogEntry entry={entry} />;
-            })}
           </main>
+        </div>
+        <div>
+          {entries.map(entry => {
+            return <LogEntry entry={entry} />;
+          })}
         </div>
       </div>
     );
