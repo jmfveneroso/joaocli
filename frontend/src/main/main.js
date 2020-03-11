@@ -29,7 +29,7 @@ function LogEntry(props) {
       <div className="content">
         {props.entry.content.split('\n').map(i => {
           return (
-            <p html={i} onInput={emitChange} onBlur={emitChange} contentEditable>{i}</p>
+            <p>{i}</p>
           );
         })}
       </div>
