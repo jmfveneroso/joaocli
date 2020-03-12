@@ -8,23 +8,25 @@ p {
   margin-bottom: 3px;
 }
 
-.log-entry {
-  border: 1px solid black;
-  margin: 15px 15px;
-  padding: 5px 10px;
+.log-entries {
+  width: 30%;
+  .log-entry {
+    border: 1px solid black;
+    margin: 15px 15px;
+    padding: 5px 10px;
 
-  .title {
-    font-size: 14px;
-    font-weight: bold;
-  }
-  .modified-at {
-    color: #197676;
-  }
-  .created-at {
-    color: #004bff;
-  }
-  .tags {
-    color: #810b46;
+    .title {
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .modified-at {
+      color: #197676;
+    }
+    .created-at {
+      color: #004bff;
+    }
+    .tags {
+      color: #810b46;
+    }
   }
 }
-

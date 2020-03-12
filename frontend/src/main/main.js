@@ -71,12 +71,12 @@ class Main extends Component {
       <div className="app">
         <div className="app-body">
           <main className="main">
+            <div className="log-entries">
+              {entries.map(entry => {
+                return <LogEntry entry={entry} />;
+              })}
+            </div>
           </main>
-        </div>
-        <div>
-          {entries.map(entry => {
-            return <LogEntry entry={entry} />;
-          })}
         </div>
       </div>
     );
