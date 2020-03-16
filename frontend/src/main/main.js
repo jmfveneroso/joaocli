@@ -28,9 +28,9 @@ function LogEntry(props) {
           {props.entry.tags}
       </div>
       <div className="content">
-        {props.entry.content.split('\n').map(i => {
+        {props.entry.content.split('\n').map((line, i) => {
           return (
-            <p>{i}</p>
+            <p key={i}>{line}</p>
           );
         })}
       </div>
@@ -73,12 +73,12 @@ class Main extends Component {
         <div className="app-body">
           <main className="main">
             <div className="main-container">
-	      <input type="text" />
-	      <Graph />
+              <input type="text" />
+              <Graph />
             </div>
             <div className="log-entries">
               {entries.map(entry => {
-                return <LogEntry entry={entry} />;
+                return <LogEntry entry={entry} key={entry.id} />;
               })}
             </div>
           </main>
