@@ -4,6 +4,7 @@
 # python manage.py migrate
 echo 'Starting server'
 
+HOST_IP=192.168.99.100
 # Start webpack server.
 # if [[ $DEBUG == *1* ]]; then
 cd frontend

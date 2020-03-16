@@ -3,6 +3,7 @@ import {Link, Switch, Route, Redirect} from 'react-router-dom';
 import {Container, Row} from 'reactstrap';
 import CodeMirror from 'react-codemirror';
 import 'codemirror/lib/codemirror.css';
+import Graph from '../graph/graph.js';
 
 function LogEntry(props) {
   function emitChange(){
@@ -71,6 +72,10 @@ class Main extends Component {
       <div className="app">
         <div className="app-body">
           <main className="main">
+            <div className="main-container">
+	      <input type="text" />
+	      <Graph />
+            </div>
             <div className="log-entries">
               {entries.map(entry => {
                 return <LogEntry entry={entry} />;
