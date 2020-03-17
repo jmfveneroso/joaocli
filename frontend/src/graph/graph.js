@@ -1,22 +1,30 @@
 import React, {Component} from 'react';
 import {Link, Switch, Route, Redirect} from 'react-router-dom';
 import {Container, Row} from 'reactstrap';
-import QueryMap from './query_map.js';
+import QueryMapSingleton from './query_map.js';
 
 class NodeComponent extends Component {
   constructor(props) {
     super(props);
-    this.state = { x: props.x, y: props.y, radius: props.radius };
+    this.state = { x: props.node.pos.x, y: props.node.pos.y, radius: props.radius };
+  }
+
+  update() {
+    this.setState({ 
+      x: props.node.pos.x, y: props.node.pos.y, radius: props.radius 
+    });
+    console.log('vc me abandounou')
   }
 
   render() {
+    console.log('amor ' + this.state.x)
     let x = this.state.x
     let y = this.state.y
     let radius = this.state.radius
     return (
       <g>
         <circle cx={x} cy={y} r={radius} stroke="red" fill="transparent" />
-        <text x={x-10} y={y+5} fill="black">Node</text>
+        <text x={x-13} y={y+3} fill="black">Node {x}</text>
       </g>
     );
   }
@@ -25,22 +33,35 @@ class NodeComponent extends Component {
 class Graph extends Component {
   constructor(props) {
     super(props);
-    this.query_map = new QueryMap()
-    this.state = {};
+    this.query_map = QueryMapSingleton
+    this.state = { counter: 0 };
   }
 
   componentDidMount() {
+    this.timer = setInterval(() => {
+      this.query_map.update()
+      this.forceUpdate()
+    }, 10);
+  }
+
+  createArr() {
+    let counter = this.state.counter;
+    let arr = []
+    arr = this.query_map.nodes.map(function (node) {
+      console.log('the rhythm: ' + counter);
+      return React.createElement(NodeComponent, {
+        key: counter++, node: node, radius: node.radius
+      });
+    });
+    return arr
   }
 
   render() {
-    const nodes = this.query_map.nodes.map(function (node) {
-      return React.createElement(NodeComponent, {
-        key: 0, x: node.x, y: node.y, radius: node.radius
-      });
-    });
+    let nodes = this.createArr()
+    console.log('the rhythm of the night');
 
     return (
-      <svg width="800" height="500" ref={this.svg}>
+      <svg width="800" height="500">
         {nodes}
       </svg>
     );
