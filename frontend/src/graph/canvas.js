@@ -355,7 +355,7 @@ class LogEntry extends Component {
   }
 }
 
-class Main extends Component {
+class Canvas extends Component {
   constructor(props) {
     super(props);
     this.top_lft = new Vector(2400, 2400)
@@ -807,29 +807,25 @@ class Main extends Component {
     }
 
     return (
-      <div className="app">
-        <div className="app-body">
-          <div className="main">
-            <div className="main-container">
-              <canvas width="800" height="800" ref={this.canvas_ref} 
-                onMouseMove={e => this.handleMouse(e)} 
-                onMouseDown={e => this.handleMouse(e)} 
-                onMouseUp={e => this.handleMouse(e)} />
+      <div>
+        <div className="main-container">
+          <canvas width="800" height="800" ref={this.canvas_ref} 
+	    onMouseMove={e => this.handleMouse(e)} 
+	    onMouseDown={e => this.handleMouse(e)} 
+	    onMouseUp={e => this.handleMouse(e)} />
+          </div>
+          <div className="log-entries">
+            <div>
+              <input className="query-box" type="text" value={this.state.query} onChange={e => this.updateQuery(e)} />
             </div>
-            <div className="log-entries">
-              <div>
-                <input className="query-box" type="text" value={this.state.query} onChange={e => this.updateQuery(e)} />
-              </div>
-              <span className="btn" onClick={addEntry}>ADD ENTRY</span> &nbsp;
-              <TagEditor tag={this.state.tag} />
-              <div>
-                {this.state.entries.map(entry => {
-                  return <LogEntry entry={entry} key={entry.id} _handleDelete={this.deleteEntry.bind(this)} />;
-                })}
-              </div>
+            <span className="btn" onClick={addEntry}>ADD ENTRY</span> &nbsp;
+            <TagEditor tag={this.state.tag} />
+            <div>
+              {this.state.entries.map(entry => {
+                return <LogEntry entry={entry} key={entry.id} _handleDelete={this.deleteEntry.bind(this)} />;
+              })}
             </div>
           </div>
-        </div>
       </div>
     )
   }
@@ -839,4 +835,4 @@ window.addEventListener('mouseup', (event) => {
   holding_mouse = false
 })
 
-export default Main ;
+export default Canvas;

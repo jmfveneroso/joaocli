@@ -3,7 +3,7 @@
 import argparse
 import datetime
 import file_syncer
-import jlogger
+from logger import jlogger
 import glob
 import io
 import json
@@ -25,6 +25,10 @@ from collections import Counter
 dir_path = os.path.dirname(os.path.realpath(__file__))
 data_path = os.path.join(dir_path, 'files')
 orig_settings = termios.tcgetattr(sys.stdin)
+
+ROOT_PATH = os.path.dirname(os.path.realpath(__file__))
+DATA_PATH = os.path.realpath(os.path.join(ROOT_PATH, 'files'))
+FILENAME = 'jmfveneroso.txt'
 
 def signal_handler(sig, frame):
   global orig_settings
@@ -78,7 +82,7 @@ def load_knowledge():
 def get_titles():
   titles = {}
   logger = jlogger.Logger()
-  for e in logger.log_entries:
+  for e in logger.entries:
     titles[e.title] = e
   return titles
 
@@ -100,7 +104,7 @@ def view_chronos():
 
 def view_log(n):
   logger = jlogger.Logger()
-  logger.print_log_entries(n)
+  print_entries(logger.get_entries(), n)
 
 def process_knowledge_piece(q):
   knowledge_pieces = load_knowledge()
@@ -138,7 +142,7 @@ def vocab():
     words += jlogger.tokenize(kps[key]['text'])
 
   logger = jlogger.Logger()
-  for e in logger.log_entries:
+  for e in logger.entries:
     words += e.get_tokens()
   words = [w for w in words]
 
@@ -236,11 +240,6 @@ def get_closest_word(w, vocab):
   return min_word
 
 def try_exact_match(logger, q):
-  e = logger.get_log_entry_by_title(q)
-  if e:
-    e.print_detailed()
-    return True
-
   try:
     e = logger.get_log_entry_by_id(int(q))
     if e:
@@ -274,7 +273,7 @@ def search(q, show_all=False):
     entries = logger.tags[tkns[0]].get_entries()
     tkns = tkns[1:]
   else:
-    entries = logger.log_entries
+    entries = logger.entries
 
   tkns = [get_closest_word(t, v) for t in tkns]
   tkn_set = { t for t in tkns }
@@ -404,7 +403,7 @@ def stats():
   logger = jlogger.Logger()
 
   token_counts = []
-  for e in logger.log_entries:
+  for e in logger.entries:
     num_tokens = len(e.get_tokens())
     token_counts.append(num_tokens)
 
@@ -417,6 +416,36 @@ def stats():
   print('Min tokens:', min(token_counts))
   print('Max tokens:', max(token_counts))
 
+def print_tag_hierarchy(tag, indents=0):
+  print('  ' * indents + tag.name + ' ' + str(tag.total_entries))
+  for c in tag.children:
+    print_tag_hierarchy(c, indents + 1)
+
+def print_entries(entries, n):
+  n = 10 if (n is None) else n
+  for e in reversed(entries):
+    e.print_summarized()
+    n -= 1
+    if n == 0:
+      break
+
+def create_log_entry():
+  logger = jlogger.Logger()
+  logger.create_entry('', 1)
+  logger.save()
+
+  filename = os.path.join(DATA_PATH, FILENAME)
+  subprocess.run(['vim', '+normal G$', filename])
+
+def edit_log_entry(id):
+  logger = jlogger.Logger()
+  entry = logger.get_entry_by_id(id)
+
+  filename = os.path.join(DATA_PATH, FILENAME)
+  if not os.path.isfile(filename):
+    raise ValueError(filename + ' does not exist')
+
+  subprocess.run(['vim', '+normal %dgg$' % entry.line_num, filename])
 
 def process_query(args):
   query = ' '.join(args.command)
@@ -430,10 +459,7 @@ def process_query(args):
 
     q = args.command[1]
     logger = jlogger.Logger()
-    e = logger.get_log_entry_by_title(q)
-    if e is None:
-      e = logger.get_log_entry_by_id(int(q))
-
+    e = logger.get_log_entry_by_id(int(q))
     if e is None:
       print('Entry does not exist')
     else:
@@ -443,17 +469,8 @@ def process_query(args):
   if args.command[0] == 'edit':
     if len(args.command) < 2:
       return
-
     q = args.command[1]
-    logger = jlogger.Logger()
-    e = logger.get_log_entry_by_title(q)
-    if e is None:
-      e = logger.get_log_entry_by_id(int(q))
-
-    if e is None:
-      print('Entry does not exist')
-    else:
-      logger.edit_log_entry(e)
+    edit_log_entry(int(q))
     return
 
   if args.command[0] == 'autoformat':
@@ -471,8 +488,7 @@ def process_query(args):
     return logger.add_chrono(args.command[1], args.command[2])
 
   if query == 'log':
-    logger = jlogger.Logger()
-    return logger.create_log_entry()
+    return create_log_entry()
 
   if query == 'view':
     return view_log(args.n)
@@ -506,7 +522,15 @@ def process_query(args):
 
   if query == 'hier':
     logger = jlogger.Logger()
-    return logger.print_tag_hierarchy()
+    return print_tag_hierarchy(logger.main_tag)
+
+  if query == 'write':
+    logger = jlogger.Logger()
+    return logger.write_full()
+
+  if query == 'load':
+    logger = jlogger.Logger()
+    return logger.load('jmfveneroso.txt')
 
   if query == 'checkpoint':
     titles = get_titles()

@@ -21,8 +21,11 @@ p {
 }
 
 .log-entries {
+  padding: 25px;
   float: right;
-  width: 30%;
+  width: 48%;
+  overflow-y: auto;
+  height: 800px;
   .log-entry {
     border: 1px solid black;
     margin: 15px 15px;
@@ -42,4 +45,30 @@ p {
       color: #810b46;
     }
   }
+}
+
+.query-box {
+  margin: 15px 15px;
+  padding: 5px;
+  width: 500px;
+}
+
+.enable-editor {
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #999;
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+
+.btn {
+  font-weight: bold;
+  cursor: pointer;
+  border: 1px solid #999;
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+
+.tag-info {
+  margin: 15px 15px;
 }

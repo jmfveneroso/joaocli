@@ -2,70 +2,66 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import TemplateView
-import jlogger
+from logger import jlogger
 import json
 import datetime
 
 @ensure_csrf_cookie
 def index(request):
-  c = {}
-  # context = RequestContext(request)
-  return render(request, "index.html", c)
+  return render(request, "index.html", {})
 
-def logs(request):
+# Entry API.
+def entry(request, entry_id=None):
+  body_unicode = request.body.decode('utf-8')
+  body = json.loads(body_unicode)
   logger = jlogger.Logger()
-  log_entries = reversed(logger.log_entries)
 
-  json_entries = []
-  for l in log_entries:
-    json_entries.append({
-        'id': l.id,
-        'title': l.title,
-        'content': '\n'.join(l.content),
-        'created_at': l.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-        'modified_at': l.modified_at.strftime("%Y-%m-%d %H:%M:%S"),
-        'tags': l.tags
-    })
+  if request.method == 'GET':
+    return JsonResponse(logger.entries_by_id[entry_id].to_json())
 
-  response_data = {
-    'entries': json_entries
-  }
-
-  return JsonResponse(response_data)
-
-def entry(request, entry_id):
-  if request.method == 'POST':
-    # Parse request parameters.
+  elif request.method == 'POST':
     body_unicode = request.body.decode('utf-8')
     body = json.loads(body_unicode)
-    entry_id = body['id']
-    content = body['content']
+    e = logger.create_entry(body['title'], body['parent_id'])
+    logger.save()
+    return JsonResponse(e.to_json())
 
-    # Update log entry.
-    logger = jlogger.Logger()
-    l = logger.log_entries_by_id[int(entry_id)]
-    now = datetime.datetime.now()
-    l.set_modified_time(now)
-    l.content = content.split('\n')
-    l.log_file.rewrite()
-
+  elif request.method == 'PUT':
+    entry = logger.entries_by_id[int(body['id'])]
+    entry.update(body)
+    logger.save()
     return JsonResponse({'status': 'ok'})
 
-  else:
-    logger = jlogger.Logger()
-    l = logger.log_entries_by_id[entry_id]
+  elif request.method == 'DELETE':
+    l = logger.delete_entry(entry_id)
+    logger.save()
+    return JsonResponse({'status': 'ok'})
 
-    json_data = {
-      'id': l.id,
-      'title': l.title,
-      'content': '\n'.join(l.content),
-      'created_at': l.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-      'modified_at': l.modified_at.strftime("%Y-%m-%d %H:%M:%S"),
-      'tags': l.tags
-    }
+# Tag API.
+def tag(request, tag_id=None):
+  body_unicode = request.body.decode('utf-8')
+  body = json.loads(body_unicode)
+  logger = jlogger.Logger()
 
-    response_data = {
-      'entry': json_data
-    }
+  if request.method == 'POST':
+    tag = logger.create_tag(body['parent'])
+    logger.save()
+    return JsonResponse(tag.to_json())
 
-    return JsonResponse(response_data)
+  elif request.method == 'PUT':
+    logger.edit_tag(body)
+    logger.save()
+    return JsonResponse({ 'status': 'ok' })
+
+  elif request.method == 'DELETE':
+    logger.delete_tag(body['id'])
+    logger.save()
+    return JsonResponse({'status': 'ok'})
+
+def all(request):
+  logger = jlogger.Logger()
+  return JsonResponse({
+    'tags': [t.to_json() for t in logger.get_tags()],
+    'entries': [e.to_json() for e in logger.get_entries()],
+  })
+
