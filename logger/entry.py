@@ -39,16 +39,6 @@ class Entry:
       tokens += tokenize(l)
     return tokens
 
-  def update(self, attributes):
-    for attr in attributes:
-      if hasattr(self, attr):
-        if not callable(getattr(self, attr)) and not attr.startswith("__"):
-          if attr == 'content':
-            self.content = attributes[attr].split('\n')
-          else:
-            setattr(self, attr, attributes[attr])
-    self.modified_at = datetime.datetime.now()
-
   def to_json(self):
     return {
       'id': self.id,
@@ -56,7 +46,7 @@ class Entry:
       'content': '\n'.join(self.content),
       'created_at': date_to_str(self.created_at),
       'modified_at': date_to_str(self.modified_at),
-      'tags': [self.category.name],
+      'category': self.category.id,
     }
 
   def print_header(self, print_tags=True):

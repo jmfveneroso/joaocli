@@ -16,12 +16,10 @@ import '../scss/core/_dropdown-menu-right.scss'
 
 // Containers
 import main from './main/'
-import entry from './entry/'
 
 ReactDOM.render((
   <HashRouter>
     <Switch>
-      <Route path="/log-entry/:id" component={entry}/>
       <Route path="/" name="main" component={main}/>
     </Switch>
   </HashRouter>

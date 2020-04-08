@@ -22,6 +22,6 @@ urlpatterns = [
   path('entry/', views.entry),
   path('tag/<int:tag_id>/', views.tag),
   path('tag/', views.tag),
-  path('all', views.all),
+  path('all/', views.all),
   path('', views.index),
 ]

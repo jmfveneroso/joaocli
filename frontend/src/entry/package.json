@@ -1,6 +1,0 @@
-{
-  "name": "entry",
-  "version": "0.0.0",
-  "private": true,
-  "main": "./entry.js"
-}

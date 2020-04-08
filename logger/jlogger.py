@@ -54,7 +54,7 @@ class Logger:
     other_tag = Tag(1, 'other', [])
     self.tags_by_name['other'] = other_tag
     self.tags_by_id[1] = other_tag 
-    other_tag.parent = self.main_tag
+    self.main_tag.add_child(other_tag)
 
     cur_indents = -1
     stack = [self.main_tag]
@@ -190,12 +190,32 @@ class Logger:
     if int(id) in self.entries_by_id:
       del self.entries_by_id[id]
 
+  def edit_entry(self, attributes):
+    entry = self.get_entry_by_id(int(attributes['id']))
+    for attr in attributes:
+      if attr == 'tag':
+        tag = self.get_tag_by_name(attributes['tag'])
+        tag.add_entry(entry)
+        
+      elif hasattr(entry, attr):
+        if not callable(getattr(entry, attr)) and not attr.startswith("__"):
+          if attr == 'content':
+            entry.content = attributes[attr].split('\n')
+          else:
+            setattr(entry, attr, attributes[attr])
+    self.modified_at = datetime.datetime.now()
+
 
   # ------- Tags --------
   def get_tag_by_id(self, id):
     if id in self.tags_by_id:
       return self.tags_by_id[id]
     raise Exception('Tag with id %d does not exist' % id)
+
+  def get_tag_by_name(self, name):
+    if name in self.tags_by_name:
+      return self.tags_by_name[name]
+    raise Exception('Tag with name %s does not exist' % name)
 
   def get_tags(self):
     tags = list(self.tags_by_id.values())
@@ -216,14 +236,17 @@ class Logger:
   def delete_tag(self, id):
     tag = self.get_tag_by_id(id)
     tag.parent.delete_child(id)
-    del self.tags_by_name[tag.name]
-    del self.tags_by_id[id]
+    for c in tag.get_child_tags():
+      for e in c.entries:
+        del self.entries_by_id[e.id]
+      del self.tags_by_id[c.id]
+      del self.tags_by_name[c.name]
 
   def edit_tag(self, attributes):
-    tag = self.get_tag_by_id(attributes['id'])
+    tag = self.get_tag_by_id(int(attributes['id']))
     tag.name = attributes['name'] if 'name' in attributes else tag.name
  
-    if 'parent' in attributes and attributes['parent'] != tag.parent.id:
-      tag.parent.delete_child(attributes['id'])
+    if 'parent' in attributes and attributes['parent'] and attributes['parent'] != tag.parent.id:
+      tag.parent.delete_child(int(attributes['id']))
       new_parent = self.get_tag_by_id(attributes['parent'])
       new_parent.add_child(tag)

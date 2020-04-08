@@ -17,6 +17,7 @@ class Tag:
 
   def add_entry(self, entry):
     self.entries.append(entry)
+    entry.category = self
     parent = self
     while parent is not None:
       parent.total_entries += 1

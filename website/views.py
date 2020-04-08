@@ -27,13 +27,12 @@ def entry(request, entry_id=None):
     return JsonResponse(e.to_json())
 
   elif request.method == 'PUT':
-    entry = logger.entries_by_id[int(body['id'])]
-    entry.update(body)
+    logger.edit_entry(body)
     logger.save()
     return JsonResponse({'status': 'ok'})
 
   elif request.method == 'DELETE':
-    l = logger.delete_entry(entry_id)
+    l = logger.delete_entry(body['id'])
     logger.save()
     return JsonResponse({'status': 'ok'})
 
@@ -54,7 +53,7 @@ def tag(request, tag_id=None):
     return JsonResponse({ 'status': 'ok' })
 
   elif request.method == 'DELETE':
-    logger.delete_tag(body['id'])
+    logger.delete_tag(int(body['id']))
     logger.save()
     return JsonResponse({'status': 'ok'})
 

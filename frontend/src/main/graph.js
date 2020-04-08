@@ -1,81 +1,65 @@
-class Vector {
-  constructor(x, y) {
-    this.x = x
-    this.y = y
-  }
+import API from './api.js';
+import {Vector, Physics} from './physics.js';
 
-  make_null() {
-    this.x = this.y = 0
-    return this
-  }
-
-  add(v) {
-    return new Vector(this.x + v.x, this.y + v.y)
-  }
-
-  sub(v) {
-    return new Vector(this.x - v.x, this.y - v.y)
-  }
-
-  multiply(scalar) {
-    return new Vector(this.x * scalar, this.y * scalar)
-  }
-
-  div(scalar) {
-    return new Vector(this.x / scalar, this.y / scalar)
-  }
-
-  dot_product(v) {
-    return new Vector(this.x * v.x, this.y * v.y)
-  }
-
-  norm() {
-    return Math.sqrt(this.x * this.x + this.y * this.y)
-  }
-
-  normalize() {
-    let norm = this.norm()
-    if (norm > 0) {
-      return new Vector(this.x / norm, this.y / norm)
-    }
-    return new Vector(this.x, this.y)
-  }
-
-  distance_to(v) {
-    return Math.sqrt(Math.pow(this.x - v.x, 2) + Math.pow(this.y - v.y, 2))
-  }
-
-  clamp(min, max) {
-    return new Vector(Math.min(Math.max(this.x, min), max), Math.min(Math.max(this.y, min), max))
-  }
-
-  toString() {
-    return 'x: ' + this.x + ' y: ' + this.y
-  }
-}
-
-class Node {
-  constructor(type, id, name, x, y, content, mass, entry, total_entries, modified_at) {
-    this.id = id
-    this.type = type
-    this.pos = new Vector(x, y)
+class TagNode {
+  constructor(tag, pos) {
+    // General attributes.
+    this.pos = pos
     this.velocity = new Vector(0, 0)
-    this.force = new Vector(0, 0)
-    this.name = name
+    this.score = 0
+    this.selected = false
+
+    // Tag attributes.
+    this.parent = null
+    this.id = tag.id
+    this.name = tag.name
+    this.total_entries = tag.total_entries
     this.children = []
     this.entries = []
-    this.content = content
-    this.score = 0
-    this.mass = mass
-    this.entry = entry 
-    this.total_entries = total_entries
-    this.active = false
-    this.modified_at = new Date(Date.parse(modified_at))
+    this.modified_at = new Date(Date.parse(tag.modified_at))
+  }
+
+  addChild(tag_node) {
+    this.children.push(tag_node)
+    tag_node.parent = this
+  }
+
+  addEntry(entry_node) {
+    this.entries.push(entry_node)
+    entry_node.category = this
+  }
+
+  incrementEntryCount(entry_node) {
+    let parent = this
+    while (parent) {
+      parent.total_entries++
+      parent = parent.parent
+    }
+  }
+
+  recalculateModifiedTime() {
+    this.modified_at = new Date()
+    this.modified_at.setTime(0)
+    for (let i = 0; i < this.entries.length; i++) {
+      if (this.entries[i].modified_at > this.modified_at) {
+        this.modified_at = this.entries[i].modified_at
+      }
+    }
+
+    for (let i = 0; i < this.children.length; i++) {
+      if (this.children[i].modified_at > this.modified_at) {
+        this.modified_at = this.children[i].modified_at
+      }
+    }
+
+    if (this.parent) {
+      this.parent.recalculateModifiedTime()
+    }
   }
 
   removeChild(tag_id) {
     for (let i = 0; i < this.children.length; i++) {
-      if (this.children[i] === tag_id) {
+      if (this.children[i].id === tag_id) {
         this.children.splice(i, 1)
 	return
       }
@@ -84,333 +68,246 @@ class Node {
 
   removeEntry(entry_id) {
     for (let i = 0; i < this.entries.length; i++) {
-      if (this.entries[i] === entry_id) {
+      if (this.entries[i].id === entry_id) {
         this.entries.splice(i, 1)
-	return
+        break
       }
+    }
+
+    let parent = this
+    while (parent) {
+      parent.total_entries--
+      parent = parent.parent
     }
   }
 
-  addChild(node) {
-    this.children.push(node.id)
+  getChildrenInternal(tag) {
+    let children = tag.children
+    for (let i = 0; i < tag.children.length; i++) {
+      children = children.concat(this.getChildrenInternal(tag.children[i]))
+    }
+    return children
+  }
+
+  getChildren(tag) {
+    return [this].concat(this.getChildrenInternal(this))
+  }
+
+  getEntriesInternal(tag) {
+    let entries = [].concat(tag.entries)
+    for (let i = 0; i < tag.children.length; i++) {
+      entries = entries.concat(this.getEntriesInternal(tag.children[i]))
+    }
+    return entries
+  }
+
+  getEntries() {
+    let entries = this.getEntriesInternal(this)
+    entries.sort((a, b) => {
+      if (a.modified_at < b.modified_at) return 1;
+      else if (a.modified_at > b.modified_at) return -1;
+      return 0;
+    })  
+    return entries
+  }
+
+  isSelected() {
+    return this.selected
   }
 }
 
-class Physics {
-  static add_repulsive_force(node, v, force) {
-    let distance_squared = Math.pow(node.pos.x - v.x, 2) + Math.pow(node.pos.y - v.y, 2)
-    let repel_vector = node.pos.sub(v).normalize().multiply(force / (distance_squared + 0.00001))
-    node.velocity = node.velocity.add(repel_vector)
-  }
+class EntryNode {
+  constructor(entry, pos) {
+    // General attributes.
+    this.pos = pos
+    this.velocity = new Vector(0, 0)
+    this.score = 0
 
-  static add_attractive_force(node, v, force) {
-    let scalar = force * node.pos.distance_to(v)
-    let attraction_vector = v.sub(node.pos).normalize().multiply(scalar)
-    node.velocity = node.velocity.add(attraction_vector)
-  }
-
-  static calculate_repulsive_forces(node, nodes) {
-    if (!node.active) return
-
-    nodes.forEach(n => {
-      if (n.id != node.id && n.active) {
-        let magnitude = Physics.REPULSION
-        if (n.type === 'tag') {
-	  magnitude *= 10
-	}
-        this.add_repulsive_force(node, n.pos, magnitude)
-      }
-    })
-  }
-
-  static calculate_elastic_forces(source, target, factor) {
-    if (!source.active || !target.active) return;
-
-    this.add_attractive_force(source, target.pos, Physics.ATTRACTION * factor)
-    this.add_attractive_force(target, source.pos, Physics.ATTRACTION * factor)
-  }
-
-  static calculate_friction_force(node) {
-    let friction_vector = node.velocity.multiply(-Physics.FRICTION)
-    node.velocity = node.velocity.add(friction_vector)
-  }
-
-  static update_motion(nodes) {
-    nodes.forEach(node => {
-      if (node.name === 'main') {
-        node.pos = new Vector(4000, 4000)
-	return
-      } 
-
-      if (!node.active) return;
-      node.pos = node.pos.add(node.velocity.multiply(Physics.temperature))
-      node.force.make_null()
-    });
-    Physics.temperature -= 0.1
-  }
-}
-
-Physics.temperature = 1000
-Physics.REPULSION = 100
-Physics.ATTRACTION = 0.0001
-Physics.FRICTION = 0.01
-Physics.CENTRAL_ATTRACTION = 0.00008
-Physics.CENTRAL_REPULSION = 80000
-Physics.RELEVANCE_ATTRACTION = 7000
-
-class IrModel {
-  constructor(nodes) {
-    this.nodes = nodes
-    this.createVocab()
-  }
-
-  createVocab(nodes) {
-    this.vocab = {}
-    for (let i = 0; i < this.nodes.length; i++) {
-      let node = this.nodes[i]
-      let tokens = (node.title + node.content).toLowerCase().split(' ')
-
-      for (let j = 0; j < tokens.length; j++) {
-        if (this.vocab[tokens[j]] === undefined) {
-          this.vocab[tokens[j]] = 0
-	}
-        this.vocab[tokens[j]]++
-      }
-    }
-  }
-
-  calculateRelevance(query) {
-    let queryTokens = query.split()
-    for (let i = 0; i < this.nodes.length; i++) {
-      let node = this.nodes[i]
-      let tokens = (node.name + node.content).toLowerCase().split(' ')
-
-       let score = 0
-       let norm = 0
-       for (let j = 0; j < tokens.length; j++) {
-         let tkn = tokens[j]
-         if (this.vocab[tkn] === undefined) {
-	   continue
-	 }
-
-         if (queryTokens.includes(tkn)) {
-           score += Math.pow(1.0 / this.vocab[tkn], 2)
-         }
-         norm += Math.pow(1.0 / this.vocab[tkn], 2)
-         
-       }
-
-       if (norm > 0) {
-         score /= Math.sqrt(norm)
-       }
-       this.nodes[i].score = score
-    }
+    // Entry attributes.
+    this.id = entry.id
+    this.title = entry.title
+    this.content = entry.content
+    this.category = null
+    this.created_at = new Date(Date.parse(entry.created_at))
+    this.modified_at = new Date(Date.parse(entry.modified_at))
   }
 }
 
 class Graph {
   constructor(nodes) {
+    this.main_tag = null
+    this.other_tag = null
+    this.tags = {}
+    this.entries = {}
+
+    this.dragging_tag = false
     this.replacing = false
     this.moving_entry = false
     this.old_parent = null
     this.selected_node = null
-    this.nodes = []
-    this.nodes_by_id = {}
-    this.tags_by_id = {}
-    this.tags_by_name = {}
-    this.irModel = null 
-    this.main_tags = []
+    this.temperature = 1000
   }
 
-  getNodeById(id) {
-    return this.nodes_by_id[id]
+  load(center) {
+    return API.getAll().then((result) => {
+      this.loadTags(result.tags, center)
+      this.loadEntries(result.entries)
+    })
   }
 
-  getTagById(id) {
-    return this.tags_by_id[id]
-  }
-
-  getTagByName(name) {
-    return this.tags_by_name[name]
-  }
-  
-  createEntryNode(entry) {
-    // let x = Math.floor(Math.random() * 3200)
-    // let y = Math.floor(Math.random() * 2000)
-
-    // let newNode = new Node('entry', entry.id, entry.title, x, y, entry.content, 1, entry, 1, entry.modified_at)
-    // this.nodes.push(newNode)
-    // this.nodes_by_id[entry.id] = newNode
-  }
-
-  createTagNode(tag, pos) {
-    let x = Math.floor(2000 + Math.random() * 4000)
-    let y = Math.floor(2000 + Math.random() * 4000)
-    if (pos) {
-      x = Math.floor(pos.x - 100 + Math.random() * 200)
-      y = Math.floor(pos.y - 100 + Math.random() * 200)
+  loadTags(tags, center) {
+    for (let i = 0; i < tags.length; i++) {
+      let pos = center.sub(new Vector(2000, 2000)).random(4000)
+      let tag_node = new TagNode(tags[i], pos)
+      this.tags[tags[i].id] = tag_node
     }
+    this.main_tag = this.tags[0]
+    this.other_tag = this.tags[1]
 
-    let new_node = new Node('tag', tag.id, tag.name, x, y, '', 1, null, tag.total_entries, tag.modified_at)
-    this.tags_by_id[tag.id] = new_node
-    this.tags_by_name[tag.name] = new_node
-    new_node.entries = tag.entries
-    new_node.children = tag.children
-    this.nodes.push(new_node)
-    return new_node
+    // Load children.
+    for (let i = 0; i < tags.length; i++) {
+      let tag_node = this.tags[tags[i].id]
+      for (let j = 0; j < tags[i].children.length; j++) {
+        let child_id = parseInt(tags[i].children[j])
+        let child_node = this.tags[child_id]
+        tag_node.addChild(child_node)
+      }
+    }
   }
 
-  createIrModel() {
-    this.irModel = new IrModel(this.nodes)
+  loadEntries(entries) {
+    for (let i = 0; i < entries.length; i++) {
+      let entry_node = new EntryNode(entries[i], new Vector(0, 0))
+      this.entries[entries[i].id] = entry_node
+      let tag = this.tags[entries[i].category]
+      tag.addEntry(entry_node)
+    }
+  }
+
+  getTags() {
+    return Object.values(this.tags)
+  }
+
+  clearSelection() {
+    for (let id in this.tags) this.tags[id].selected = false
+    this.selected_node = null
+  }
+
+  selectTag(tag_id) {
+    this.clearSelection()
+    this.tags[tag_id].selected = true
+    this.selected_node = this.tags[tag_id]
   }
 
   update() {
+    if (this.temperature <= 0) return
+    for (let id in this.tags) {
+      this.tags[id].velocity = new Vector(0, 0)
+    }
+
+    for (let id in this.tags) {
+      let tag = this.tags[id]
+
+      // Calculate repulsion.
+      for (let id2 in this.tags) {
+        let tag2 = this.tags[id2]
+        if (tag2.isSelected() && this.replacing) continue
+        if (tag.id == tag2.id) continue
+        if (!this.replacing || !tag.isSelected()) 
+          Physics.add_repulsive_force(tag, tag2.pos)
+      }
+
+      // Calculate attraction.
+      for (let i = 0; i < tag.children.length; i++) {
+        let child = tag.children[i]
+        if (!this.replacing || !child.isSelected())  
+          Physics.add_attractive_force(tag, child.pos)
+        Physics.add_attractive_force(child, tag.pos)
+      }
+    }
+
+    for (let id in this.tags) {
+      let tag = this.tags[id]
+      if (tag.id === 0) continue
+      tag.pos = tag.pos.add(tag.velocity.multiply(this.temperature))
+    }
+    this.temperature -= 0.01
+  }
+
+  deleteEntry(id) {
     let self = this
-    this.nodes.forEach(node => {
-      if (!node.active) return
-      if (self.selected_node && self.replacing) {
-        if (node.id == self.selected_node.id) {
-          node.velocity = new Vector(0, 0)
-	  return
-	}
-      }
-      node.velocity = new Vector(0, 0)
-
-      self.nodes.forEach(n => {
-        if (self.selected_node && n.id == self.selected_node.id && self.replacing) return
-        if (n.id != node.id && n.active) {
-          let magnitude = ((n.type === 'tag') ? 10 : 1) * Physics.REPULSION
-          Physics.add_repulsive_force(node, n.pos, magnitude)
-        }
-      })
-    });
-
-    this.nodes.forEach(node => {
-      node.children.forEach(id => {
-        let target = self.getTagById(id)
-        if (target !== undefined) {
-          Physics.calculate_elastic_forces(node, target, 1)
-        }
-      })
-
-      // node.entries.forEach(id => {
-      //   let target = self.getNodeById(id)
-      //   if (target !== undefined) {
-      //     Physics.calculate_elastic_forces(node, target, 1) 
-      //   }
-      // })
-    });
-    
-    Physics.update_motion(this.nodes)
-  }
-
-  getAllEntryIds(node_id) {
-    let node = this.getTagById(node_id)
-    if (node === undefined)
-      return []
-    let entries = node.entries
-    node.children.forEach(n => {
-      entries = entries.concat(this.getAllEntryIds(n))
+    return API.deleteEntry(id).then(function (data) {
+      let tag = self.entries[id].category
+      tag.removeEntry(id)
+      tag.recalculateModifiedTime()
+      delete self.entries[id]
     })
-    return entries
   }
 
-  rankNodes(query) {
-    this.irModel.calculateRelevance(query)
+  updateEntryTitle(id, title) {
+    let entry = this.entries[id]
+    entry.title = title
+    return API.updateEntryContent(id, title, entry.content)
+  }
 
-    this.nodes.sort((a, b) => {
-      if (a.score > b.score) {
-        return -1
-      } else if (a.score < b.score) {
-        return 1
-      } else if (a.modified_at < b.modified_at) {
-        return -1;
-      } else if (a.modified_at > b.modified_at) {
-        return 1;
+  updateEntryContent(id, new_content) {
+    let entry = this.entries[id]
+    entry.content = new_content
+    return API.updateEntryContent(id, entry.title, new_content)
+  }
+
+  changeEntryParent(entry, new_parent) {
+    let tag = entry.category
+    tag.removeEntry(entry.id)
+    new_parent.addEntry(entry)
+    return API.updateEntryTag(entry.id, new_parent.name)
+  }
+
+  createEntry() {
+    let self = this
+    return API.createEntry(this.selected_node.id, 'New entry').then((entry) => {
+      let entry_node = new EntryNode(entry, new Vector(0, 0))
+      self.entries[entry.id] = entry_node
+      self.selected_node.addEntry(entry_node)
+      self.selected_node.incrementEntryCount()
+      self.selected_node.recalculateModifiedTime()
+      return entry_node
+    })
+  }
+
+  createTag(parent) {
+    let self = this
+    API.createTag('new', parent.id).then(function(data) {
+      let tag_node = new TagNode(data, parent.pos.random(200))
+      self.tags[tag_node.id] = tag_node
+      self.selected_node.addChild(tag_node)
+    })
+  }
+
+  deleteTag(tag) {
+    let self = this
+    API.deleteTag(tag.id).then(function(data) {
+      tag.parent.removeChild(tag.id)
+      let children = tag.getChildren()
+      for (let i = 0; i < children.length; i++) {
+        delete self.tags[children[i].id]
       }
-      return 0;
-    })  
-
-    for (let i = 0; i < this.nodes.length; i++) {
-      this.nodes[i].active = this.nodes[i].type === 'tag'
-    }
-  }
-
-  setRepulsion(repulsion) {
-    Physics.REPULSION = repulsion
-  }
-
-  setAttraction(attraction) {
-    Physics.ATTRACTION = attraction
-  }
-
-  setFriction(friction) {
-    Physics.FRICTION = friction
-  }
-
-  setCentralRepulsion(central_repulsion) {
-    Physics.CENTRAL_REPULSION = central_repulsion
-  }
-
-  setCentralAttraction(central_attraction) {
-    Physics.CENTRAL_ATTRACTION = central_attraction
-  }
-
-  setRelevanceAttraction(relevance_attraction) {
-    Physics.RELEVANCE_ATTRACTION = relevance_attraction
-  }
-
-  setMainTags(main_tags) {
-    this.main_tags = main_tags
-  }
-
-  getTagParent(tag_id) {
-    let tag = this.tags_by_id[tag_id]
-    for (let i = 0; i < this.nodes.length; i++) {
-      if (this.nodes[i].type === 'tag') {
-        for (let j = 0; j < this.nodes[i].children.length; j++) {
-          if (this.nodes[i].children[j] === tag_id) {
-	    return this.nodes[i]
-	  }
-	}
+      let entries = tag.getEntries()
+      for (let i = 0; i < entries.length; i++) {
+        delete self.entries[entries[i].id]
       }
-    }
-    return null
-  }
-
-  deleteTag(tag_id) {
-    for (let i = 0; i < this.nodes.length; i++) {
-      if (this.nodes[i].type === 'tag') {
-        let found = false
-        for (let j = 0; j < this.nodes[i].children.length; j++) {
-          if (this.nodes[i].children[j] === tag_id) {
-            this.nodes[i].children.splice(j, 1)
-            found = true
-	    break
-	  }
-	}
-	if (found) break
-      }
-    }
-    for (let i = 0; i < this.nodes.length; i++) {
-      if (this.nodes[i].type === 'tag' && this.nodes[i].id === tag_id) {
-        this.nodes.splice(i, 1)
-	break
-      }
-    }
-    delete this.tags_by_id[tag_id]
+    })
   }
 
   getClosestNode(source) {
     let min_distance = 999999999
     let closest_node = null
-    for (let i = 0; i < this.nodes.length; i++) {
-      const node = this.nodes[i]
-      if (!node.active) continue
-      if (node.id === source.id) continue
-      if (node.name === 'other') continue
-      if (source.children.includes(node.id)) continue
+    for (let id in this.tags) {
+      id = parseInt(id)
+      if (id === source.id || id === 1) continue
+      if (source.children.includes(id)) continue
 
+      const node = this.tags[id]
       let distance = node.pos.distance_to(source.pos)
       if (distance < min_distance) {
         min_distance = distance
@@ -419,12 +316,35 @@ class Graph {
     }
     return closest_node
   }
+
+  moveSelectionToParent(parent) {
+    let old_parent = this.old_parent
+    let tag = this.selected_node
+    return API.editTag(tag.id, tag.name, parent.id).then(function(data) {
+      tag.parent.removeChild(tag)
+      parent.addChild(tag)
+    })
+  }
+
+  editTagTitle(tag_id, new_title) {
+    let tag = this.tags[tag_id]
+    API.editTag(tag.id, new_title, null).then((data) => {
+      console.log(data)
+    })
+  }
+
+  getEntryById(id) {
+    return this.entries[id]
+  }
+
+  getTagById(id) {
+    return this.tags[id]
+  }
+
+  getEntries() {
+    return this.main_tag.getEntries()
+  }
 }
 
 let GraphSingleton = new Graph()
-
-export {
-  GraphSingleton,
-  Vector,
-  Physics
-}
+export default GraphSingleton;

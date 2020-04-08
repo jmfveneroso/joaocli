@@ -16,14 +16,15 @@ p {
   }
   canvas {
     margin: 20px 20px;
-    border: 1px solid black;
+    border: 1px dotted #999;
   }
 }
 
 .log-entries {
+  background-color: #eee;
   padding: 25px;
   float: right;
-  width: 48%;
+  width: 40%;
   overflow-y: auto;
   height: 800px;
   .log-entry {
@@ -65,8 +66,9 @@ p {
   font-weight: bold;
   cursor: pointer;
   border: 1px solid #999;
-  border-radius: 5px;
+  border-radius: 2px;
   padding: 2px 5px;
+  line-height: 15px;
 }
 
 .tag-info {

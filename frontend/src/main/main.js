@@ -1,582 +1,216 @@
 import React, {Component} from 'react';
 import {Link, Switch, Route, Redirect} from 'react-router-dom';
 import {Container, Row} from 'reactstrap';
-import {GraphSingleton, Vector, Physics} from './graph.js';
-import CodeMirror from 'react-codemirror';
-import jQuery from 'jquery';
-import 'codemirror/lib/codemirror.css';
+import GraphSingleton from './graph.js';
+import RankerSingleton from './ranker.js';
+import {Vector, Physics} from './physics.js';
+import API from './api.js';
+import {UiStateSingleton, States} from './uistate.js';
+import Entry from './entry.js';
+import Tag from './tag.js';
 
 let holding_mouse = false
-let SENSIBILITY = 4
-let WHEEL_SENSITIVITY = 0.01
-let MIN_ZOOM = 0.25
-let MAX_ZOOM = 16
-
-function daysBetween(date1, date2) {
-  let diff_in_time = date2.getTime() - date1.getTime()
-  return diff_in_time / (1000 * 3600 * 24)
-}
-
-function getCookie(name) {
-  var cookieValue = null;
-  if (document.cookie && document.cookie !== '') {
-    var cookies = document.cookie.split(';');
-    for (var i = 0; i < cookies.length; i++) {
-      var cookie = jQuery.trim(cookies[i]);
-      if (cookie.substring(0, name.length + 1) === (name + '=')) {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-        break;
-      }
-    }
-  }
-  return cookieValue;
-}
-
-class TagEditor extends Component {
-  constructor(props) {
-    super(props)
-    this.graph = GraphSingleton
-    this.state = {
-      editor_enabled: false,
-      tag_name: '',
-    }
-    this.debouncer = null
-  }
-
-  render() {
-    let self = this
-    let tag = this.props.tag
-    this.state.tag_name = tag.name
-    
-    function addTag() {
-      let json = {
-        name: 'new',  
-        parent: self.graph.selected_node.id, 
-      }
-
-      let token = getCookie('csrftoken')
-      fetch('/tag/', {
-        method: 'post',
-        mode: 'same-origin',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRFToken': token,
-        },
-        credentials: 'include',
-        body: JSON.stringify(json),
-      }).then(function(response) {
-        return response.json();
-      }).then(function(data) {
-        console.log(data)
-        let new_node = self.graph.createTagNode({
-          'id': data.id,
-          'name': 'new-' + data.id.toString(),
-          'children': [],
-          'entries': [],
-          'total_entries': 0,
-          'created_at': new Date(),
-          'modified_at': new Date(),
-        }, self.graph.selected_node.pos)
-        new_node.active = true
-        self.graph.selected_node.children.push(data.id)
-      })
-    }
-
-    function deleteTag() {
-      let tag_id = self.graph.selected_node.id
-      let json = {
-        id: tag_id
-      }
-
-      let token = getCookie('csrftoken')
-      fetch('/tag/', {
-        method: 'delete',
-        mode: 'same-origin',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRFToken': token,
-        },
-        credentials: 'include',
-        body: JSON.stringify(json),
-      }).then(function(response) {
-        return response.json();
-      }).then(function(data) {
-        self.graph.deleteTag(tag_id)
-      })
-    }
-
-    function enableEditor () {
-      self.setState({ editor_enabled: true })
-    }
-
-    function disableEditor() {
-      self.setState({ editor_enabled: false })
-    }
-
-    function updateTitle(event) {
-      let newTitle = event.currentTarget.value
-      tag.name = newTitle
-      console.log(tag)
-      console.log(tag.name)
-      self.setState({ tag_name: newTitle })
-
-      clearTimeout(self.debouncer)
-      self.debouncer = setTimeout(function() {
-        let json = {
-          id: tag.id,
-          name: tag.name,
-        }
-
-        let token = getCookie('csrftoken')
-        fetch('/tag/', {
-          method: 'put',
-          mode: 'same-origin',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRFToken': token,
-          },
-          credentials: 'include',
-          body: JSON.stringify(json),
-        }).then(function(response) {
-          return response.json();
-        }).then(function(data) {
-          console.log(data)
-        })
-        
-        console.log(newTitle)
-      }, 300)
-    }
-
-    if (this.state.editor_enabled) {
-      return (
-        <div className="tag-info">
-          <span>({tag.id})</span> - &nbsp;
-          <input type="text" value={this.state.tag_name} onChange={e => updateTitle(e)} /> - &nbsp;
-          <span>{tag.modified_at.toString() }</span>
-          <div>
-            <span className="btn" onClick={addTag}>ADD TAG</span> &nbsp;
-            <span className="btn" onClick={deleteTag}>DELETE</span> &nbsp;
-            <span className="btn" onClick={disableEditor}>VIEW</span> 
-          </div>
-        </div>
-      )
-    } else {
-      return (
-        <div className="tag-info">
-          <span>({tag.id})</span> - &nbsp;
-          <span>{this.state.tag_name}</span> - &nbsp;
-          <span>{tag.modified_at.toString() }</span>
-          <div>
-            <span className="btn" onClick={addTag}>ADD TAG</span> &nbsp;
-            <span className="btn" onClick={deleteTag}>DELETE</span> &nbsp;
-            <span className="btn" onClick={enableEditor}>EDIT</span> 
-          </div>
-        </div>
-      )
-    }
-  }
-}
-
-class LogEntry extends Component {
-  constructor(props) {
-    super(props)
-    this.props = props
-    this.debounce = null
-    this.titleDebounce = null
-    this.state = {
-      enable_editor: false,
-      content: props.entry.content,
-      title: props.entry.title
-    }
-  }
-
-  updateCode(newCode) {
-    let self = this
-    clearTimeout(this.debounce)
-    this.debounce = setTimeout(function() {
-      let json = {
-        id: self.props.entry.id,
-        title: self.state.title,
-        content: newCode
-      }
-
-      let token = getCookie('csrftoken')
-      fetch('/entry/' + self.props.entry.id + '/', {
-        method: 'put',
-        mode: 'same-origin',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRFToken': token,
-        },
-        credentials: 'include',
-        body: JSON.stringify(json),
-      }).then(function(response) {
-        return response.json();
-      }).then(function(data) {
-        self.props.entry.title = self.state.title
-        self.props.entry.content = newCode
-        self.setState({
-          content: newCode
-        })
-      })
-    }, 300)
-  }
-
-  updateTitle(event) {
-    let newTitle = event.currentTarget.value
-    this.setState({
-      title: newTitle
-    });
-
-    let self = this
-    clearTimeout(this.titleDebounce)
-    this.titleDebounce = setTimeout(function() {
-      self.updateCode(self.state.content)
-    }, 300)
-  }
-
-  deleteEntry(event) {
-    let self = this
-    let json = {
-      id: self.props.entry.id
-    }
-
-    let token = getCookie('csrftoken')
-    fetch('/entry/' + self.props.entry.id + '/', {
-      method: 'delete',
-      mode: 'same-origin',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-CSRFToken': token,
-      },
-      credentials: 'include',
-      body: JSON.stringify(json),
-    }).then(function(response) {
-      return response.json();
-    }).then(function(data) {
-      self.props._handleDelete(self.props.entry.id)
-    })
-  }
-
-  moveEntry(event) {
-    GraphSingleton.selected_node = this.props.entry
-    GraphSingleton.moving_entry = this.props.entry
-  }
-
-  render() {
-    let self = this
-    function enableEditor() {
-      self.setState({
-        enable_editor: true
-      })
-    }
-
-    function disableEditor() {
-      self.setState({
-        enable_editor: false
-      })
-    }
-
-    let props = this.props
-    if (props.entry === null) {
-      return (
-        <div>Nothing</div>
-      )
-    }
-
-    let options = {
-      lineNumbers: true,
-    };
-
-    let content = this.state.content
-    let title = this.state.title
-    if (this.state.enable_editor) {
-      return (
-        <div className="log-entry">
-          <span className="title">{props.entry.id} -</span> 
-          <input type="text" value={title} onChange={e => self.updateTitle(e)} /> 
-          <div>
-            <span className="enable-editor" onClick={disableEditor}>VIEW</span> 
-          </div>
-          <div className="timestamp">
-            <span className="modified-at">
-              M: {props.entry.modified_at}
-            </span>
-            &nbsp;
-            <span className="created-at">
-              C: {props.entry.created_at}
-            </span>
-          </div>
-          <div className="tags">
-            {props.entry.tags}
-          </div>
-          <CodeMirror value={content} 
-            onChange={this.updateCode.bind(this)} 
-            options={options} />
-        </div>
-      )
-    } else {
-      return (
-        <div className="log-entry">
-          <span className="title">{props.entry.id} -</span>
-          <span>{title}</span>
-          <div>
-            <span className="enable-editor" onClick={enableEditor}>EDIT</span> &nbsp;
-            <span className="enable-editor" onClick={e => self.deleteEntry(e)}>DELETE</span> &nbsp;
-            <span className="enable-editor" onClick={e => self.moveEntry(e)}>MOVE</span> 
-          </div>
-          <div className="timestamp">
-            <span className="modified-at">
-              M: {props.entry.modified_at}
-            </span>
-            &nbsp;
-            <span className="created-at">
-              C: {props.entry.created_at}
-            </span>
-          </div>
-          <div className="tags">
-              {props.entry.tags}
-          </div>
-          <div className="content">
-            {content.split('\n').map((line, i) => {
-              return (
-                <p key={i}>{line}</p>
-              )
-            })}
-          </div>
-        </div>
-      )
-    }
-  }
-}
+const SENSIBILITY = 4
+const WHEEL_SENSITIVITY = 0.01
+const MIN_ZOOM = 0.25
+const MAX_ZOOM = 16
+const DOUBLE_CLICK_DELAY = 300
+const CANVAS_WIDTH = 600
+const CANVAS_HEIGHT = 600
+const SPACE_WIDTH = MAX_ZOOM * CANVAS_WIDTH
+const SPACE_HEIGHT = MAX_ZOOM * CANVAS_HEIGHT
 
 class Main extends Component {
   constructor(props) {
     super(props);
-    this.top_lft = new Vector(2400, 2400)
-    this.graph = GraphSingleton
-    this.entriesById = {}
     this.canvas_ref = React.createRef()
+    this.zoom = 4
+    this.top_lft = new Vector(
+      (SPACE_WIDTH - CANVAS_WIDTH*this.zoom)/2, 
+      (SPACE_HEIGHT - CANVAS_HEIGHT*this.zoom)/2
+    )
 
-    this.physicsTimer = null
-
-    this.holdMouseTimer = null
+    this.hold_mouse_timer = null
     this.mouseX = 0
     this.mouseY = 0
     this.newMouseX = 0
     this.newMouseY = 0
-    this.zoom = 4
 
     this.clicked = false
-    this.clickTimer = null
-    this.queryDebounce = null
-    this.next_tag_id = -1
+    this.query_debounce = null
 
     this.state = {
       query: '',
       entry: null,
       entries: [],
       tag: {name: '', modified_at: ''},
-      holding_node: false,
     };
   }
 
-  updateQuery(event) {
-    let newQuery = event.currentTarget.value
-    this.setState({
-      query: newQuery
-    });
-
-    let self = this
-    clearTimeout(this.queryDebounce)
-    this.queryDebounce = setTimeout(function() {
-      Physics.temperature = 500
-      self.counter = 500
-      self.graph.rankNodes(newQuery)
-    }, 300)
-  }
-
-  getTagSize(node) {
-    return 20 + 80 * node.total_entries / 500
+  getCanvasPos(pos) {
+    return pos.sub(this.top_lft).div(this.zoom)
   }
 
   updateTopLft(new_top_lft) {
     this.top_lft = new_top_lft
-
     if (this.top_lft.x < 0) this.top_lft.x = 0
     if (this.top_lft.y < 0) this.top_lft.y = 0
-    if (this.top_lft.x + 800 * this.zoom > 8000) this.top_lft.x = 8000 - 800 * this.zoom
-    if (this.top_lft.y + 800 * this.zoom > 8000) this.top_lft.y = 8000 - 800 * this.zoom
+    if (this.top_lft.x + CANVAS_WIDTH * this.zoom > SPACE_WIDTH) 
+      this.top_lft.x = SPACE_WIDTH - CANVAS_WIDTH * this.zoom
+    if (this.top_lft.y + CANVAS_HEIGHT * this.zoom > SPACE_HEIGHT) 
+      this.top_lft.y = SPACE_HEIGHT - CANVAS_HEIGHT * this.zoom
   }
 
-  changeEntryTag(entry, tag) {
-    let json = {
-      id: entry.id,
-      tags: [tag.name]
-    }
+  updateQuery(event) {
+    let new_query = event.currentTarget.value
+    this.setState({
+      query: new_query
+    });
 
-    if (entry.tags.length) {
-      for (let i = 0; i < entry.tags.length; i++) {
-        let t = GraphSingleton.getTagByName(entry.tags[i])
-        console.log(t.name)
-        t.removeEntry(entry.id)
+    let self = this
+    clearTimeout(this.query_debounce)
+    this.query_debounce = setTimeout(function() {
+      let entries = GraphSingleton.selected_node.getEntries()
+      if (new_query.length >= 2) {
+        RankerSingleton.scoreEntries(new_query, entries)
+        entries = entries.filter(e => e.score > 0)
+        entries.sort((a, b) => {
+          if (a.score > b.score) {
+            return -1
+          } else if (a.score < b.score) {
+            return 1
+          } else if (a.modified_at < b.modified_at) {
+            return -1;
+          } else if (a.modified_at > b.modified_at) {
+            return 1;
+          }
+          return 0;
+        })  
       }
-    } else {
-      let t = GraphSingleton.getTagByName('other')
-      t.removeEntry(entry.id)
-    }
-    tag.entries.unshift(entry.id)
+      self.setState({ entries: entries })
+    }, 300)
+  }
 
-    let token = getCookie('csrftoken')
-    fetch('/entry/' + entry.id + '/', {
-      method: 'put',
-      mode: 'same-origin',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-CSRFToken': token,
-      },
-      credentials: 'include',
-      body: JSON.stringify(json),
-    }).then(function(response) {
-      return response.json();
-    }).then(function(data) {
-      console.log(data)
+  getMousePos() {
+    return new Vector(this.mouse_x, this.mouse_y).sub(new Vector(20, 20))
+  }
+
+  maybeGetClickedTag(mouse_pos) {
+    let tags = GraphSingleton.getTags()
+    for (let i = 0; i < tags.length; i++) {
+      let pos = this.getCanvasPos(tags[i].pos)
+      let distance = pos.distance_to(this.getMousePos())
+      let size = this.getTagSize(tags[i]) / this.zoom
+      if (distance < size) return tags[i]
+    }
+    return null
+  }
+
+  onTagClick(tag) {
+    if (GraphSingleton.moving_entry) {
+      GraphSingleton.changeEntryParent(GraphSingleton.moving_entry, tag)
+      GraphSingleton.selected_node = null
+    }
+
+    GraphSingleton.selectTag(tag.id)
+    this.setState({
+      entries: tag.getEntries(),
+      tag: tag,
+      query: '',
     })
   }
 
+  onTagDoubleClick(tag) {
+    tag.parent.removeChild(tag.id)
+    GraphSingleton.replacing = true
+  }
+
+  endReplacing(event) {
+    GraphSingleton.replacing = false
+    let parent = GraphSingleton.getClosestNode(GraphSingleton.selected_node)
+    let distance = parent.pos.distance_to(GraphSingleton.selected_node.pos)
+    if (distance < 300) {
+      GraphSingleton.moveSelectionToParent(parent)
+    }
+  }
+
   handleMouse(event) {
-    this.newMouseX = event.clientX;
-    this.newMouseY = event.clientY;
+    let self = this
+    this.new_mouse_x = event.clientX;
+    this.new_mouse_y = event.clientY;
     if (event.type === "mousedown") {
-      if (this.graph.replacing) {
-        this.graph.replacing = false
-
-        let mousePos = new Vector(this.newMouseX, this.newMouseY).sub(new Vector(20, 20)).multiply(this.zoom).add(this.top_lft)
-        let node = this.graph.getClosestNode(this.graph.selected_node)
-
-        let distance = node.pos.distance_to(this.graph.selected_node.pos)
-        if (distance > 300) {
-          this.graph.old_parent.addChild(this.graph.selected_node)
-        } else {
-          let self = this
-          let token = getCookie('csrftoken')
-          let json = {
-            id: this.graph.selected_node.id,
-            name: this.graph.selected_node.name,
-            parent: node.id
-          }
-
-          fetch('/tag/', {
-            method: 'put',
-            mode: 'same-origin',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'X-CSRFToken': token,
-            },
-            credentials: 'include',
-            body: JSON.stringify(json),
-          }).then(function(response) {
-            return response.json();
-          }).then(function(data) {
-            console.log(data)
-            node.addChild(self.graph.selected_node)
-          })
-        }
-      }
-
+      if (GraphSingleton.replacing) this.endReplacing()
       holding_mouse = true
-      this.mouseX = this.newMouseX
-      this.mouseY = this.newMouseY
+      this.mouse_x = this.new_mouse_x
+      this.mouse_y = this.new_mouse_y
 
-      this.state.holding_node = false
-      let mousePos = new Vector(this.mouseX, this.mouseY).sub(new Vector(20, 20))
-      for (let i = 0; i < this.graph.nodes.length; i++) {
-        let node = this.graph.nodes[i]
-        if (!node.active) continue
-
-        let pos = node.pos.sub(this.top_lft).div(this.zoom)
-        let distance = pos.distance_to(mousePos)
-
-        let size = 10 / this.zoom
-        if (node.type === 'tag') {
-          size = this.getTagSize(node) / this.zoom
-        }
-
-        if (distance < size) {
-          if (this.graph.moving_entry) {
-            this.changeEntryTag(this.graph.moving_entry, node)
-            this.graph.moving_entry = null
-            return
-          }
-
-          this.state.holding_node = true
-          this.graph.selected_node = node
- 
-          let entries = [node.entry]
-          if (this.graph.selected_node.type === 'tag') {
-            let self = this
-            let entry_ids = node.entries
-            entries = entry_ids.map(id => {
-              return self.entriesById[id]
-            })
-          }
-          this.setState({
-            entries: entries,
-            tag: node,
-          })
-
-          if (this.clicked) {
-            let tag_id = this.graph.selected_node.id
-            let parent = this.graph.getTagParent(tag_id)
-            parent.removeChild(tag_id)
-            this.graph.replacing = true
-            this.graph.old_parent = parent
-          }
-
-          let self = this
-          this.clicked = true
-          this.clickTimer = setTimeout(function() {
-            self.clicked = false
-          }, 300)
-          break
-        }
-      }
-
-      let self = this
-      this.timer = setInterval(function(){
-	if (!holding_mouse && !self.graph.replacing) {
-          clearInterval(self.timer)
-	  return
+      let clicked_tag = this.maybeGetClickedTag()
+      if (clicked_tag !== null) {
+        GraphSingleton.dragging_tag = true
+        if (this.clicked) {
+	  this.onTagDoubleClick(clicked_tag)
+        } else {
+          this.onTagClick(clicked_tag)
 	}
 
-        if (self.graph.selected_node !== null && self.state.holding_node) {
-          let node = self.graph.selected_node
-          if (node !== undefined) {
-            let mousePos = new Vector(self.newMouseX, self.newMouseY).sub(new Vector(20, 20))
-            node.pos = self.top_lft.add(mousePos.multiply(self.zoom))
-            Physics.temperature = 500
-            self.counter = 500
-          }
-        } else {
-          let dragDirection = new Vector(self.newMouseX - self.mouseX, self.newMouseY - self.mouseY)
-          dragDirection = dragDirection.multiply(SENSIBILITY)
-          self.updateTopLft(self.top_lft.add(dragDirection.multiply(self.zoom)))
-          self.mouseX = self.newMouseX
-          self.mouseY = self.newMouseY
-        }
-      }, 10);
+        // Detect double click.
+        this.clicked = true
+        setTimeout(() => {self.clicked = false}, DOUBLE_CLICK_DELAY)
+      }
 
-      this.graph.moving_entry = null
+      GraphSingleton.moving_entry = null
     } else if (event.type === "mouseup") {
-      clearInterval(this.holdMouseTimer)
+      holding_mouse = false
+      GraphSingleton.dragging_tag = false
     }
+  }
+
+  registerOnMouseDrag() {
+    let self = this
+    setInterval(function(){
+      if (!holding_mouse && !GraphSingleton.replacing) return
+
+      if (GraphSingleton.replacing || GraphSingleton.dragging_tag) {
+        let mousePos = new Vector(self.new_mouse_x, self.new_mouse_y).sub(new Vector(20, 20))
+        GraphSingleton.selected_node.pos = self.top_lft.add(mousePos.multiply(self.zoom))
+        Physics.temperature = 500
+      } else {
+        let dragDirection = new Vector(self.new_mouse_x - self.mouse_x, self.new_mouse_y - self.mouse_y)
+        dragDirection = dragDirection.multiply(SENSIBILITY)
+        self.updateTopLft(self.top_lft.add(dragDirection.multiply(self.zoom)))
+        self.mouse_x = self.new_mouse_x
+        self.mouse_y = self.new_mouse_y
+      }
+    }, 10);
+  }
+
+  addEntry(entry){
+    let entries = this.state.entries
+    entries.unshift(entry)
+    this.setState({
+      entries: entries
+    })
+  }
+
+  deleteEntry(id){
+    this.setState(prevState => ({
+      entries: prevState.entries.filter(e => e.id != id )
+    }))
+  }
+
+  registerOnWheel() {
+    let self = this
+    this.canvas_ref.current.addEventListener('wheel', (e) => {
+      event.preventDefault()
+
+      let old_zoom = self.zoom
+      self.zoom += WHEEL_SENSITIVITY * event.deltaY
+      if (self.zoom < MIN_ZOOM) self.zoom = MIN_ZOOM
+      if (self.zoom > MAX_ZOOM) self.zoom = MAX_ZOOM
+
+      let stride = new Vector(400, 400).multiply(old_zoom - self.zoom)
+      self.updateTopLft(self.top_lft.add(stride))
+    }, { passive: false })
   }
 
   drawCircle(ctx, pos, radius, color, lineWidth) {
@@ -621,197 +255,86 @@ class Main extends Component {
     ctx.stroke();
   }
 
+  getTagSize(tag) {
+    return 20 + 80 * tag.total_entries / 500
+  }
+
+  getDaysOld(tag) {
+    let days_old = 0
+    if (tag.modified_at instanceof Date) {
+      let diff_in_time = tag.modified_at.getTime() - (new Date()).getTime()
+      days_old = diff_in_time / (1000 * 3600 * 24)
+    }
+    return days_old
+  }
+
   drawEdges(ctx) {
-    // this.graph.nodes.forEach(node => {
-    //   if (!node.active) return;
-    //   
-    //   node.entries.forEach(id => {
-    //     let destNode = this.graph.getNodeById(id)
-    //     if (destNode === undefined) return
-    //     if (!destNode.active) return;
-
-    //     // this.drawLine(ctx, node.pos.sub(this.top_lft).div(this.zoom), 
-    //     //   destNode.pos.sub(this.top_lft).div(this.zoom), '#999999', 1)
-    //   })
-    // });
-
-    this.graph.nodes.forEach(node => {
-      if (!node.active) return;
-
-      node.children.forEach(id => {
-        let destNode = this.graph.getTagById(id)
-        if (destNode === undefined) return
-        if (!destNode.active) return;
-
-        this.drawLine(ctx, node.pos.sub(this.top_lft).div(this.zoom), 
-                      destNode.pos.sub(this.top_lft).div(this.zoom), 
+    GraphSingleton.getTags().forEach(t => {
+      t.children.forEach(c => {
+        if (GraphSingleton.selected_node && c.id == GraphSingleton.selected_node.id && GraphSingleton.replacing)
+          return
+        this.drawLine(ctx, this.getCanvasPos(t.pos), this.getCanvasPos(c.pos),
                       '#999999', 2)
       })
     });
   }
 
   drawNodes(ctx) {
-    this.graph.nodes.forEach(node => {
-      if (!node.active) return;
+    GraphSingleton.getTags().forEach(tag => {
+      let pos = this.getCanvasPos(tag.pos)
+      let size = this.getTagSize(tag) / this.zoom
 
-      let pos = node.pos.sub(this.top_lft).div(this.zoom)
-      if (node.type === 'entry') {
-        let size = 10 / this.zoom
-        this.drawCircle(ctx, pos, size, '#ee9999', 1)
+      // Width.
+      let line_width = (tag.isSelected()) ? 3 : 1
 
-        // let top_lft = pos.sub(new Vector(size/2, size/2))
-        // this.drawRectangle(ctx, top_lft, new Vector(size, size))
+      // Color.
+      let days_old = this.getDaysOld(tag)
+      days_old = (days_old > 14) ? 14 : days_old
+      let lightness = 50 + (-days_old * 45 / 14)
 
-        if (this.zoom < 2) {
-          let textPos = pos.sub(new Vector(0, size + 10))
-          this.drawText(ctx, node.name, textPos)
-        }
-      } else if (node.type === 'tag') {
-        let size = this.getTagSize(node) / this.zoom
+      this.drawCircle(ctx, pos, size, 'hsl(142, 100%, ' + lightness.toString() + '%)', line_width)
+      this.drawText(ctx, tag.total_entries.toString(), pos)
 
-        let lineWidth = 1
-        if (this.graph.selected_node !== null) {
-          if (this.graph.selected_node.id === node.id) {
-            lineWidth = 3
-          }
-        }
-
-        let days_old = 0
-        if (node.modified_at instanceof Date) {
-          days_old = -daysBetween(new Date(), node.modified_at)
-        }
-
-        days_old = (days_old > 14) ? 14 : days_old
-        let lightness = 50 + (days_old * 45 / 14)
-
-        this.drawCircle(ctx, pos, size, 'hsl(142, 100%, ' + lightness.toString() + '%)', lineWidth)
-        this.drawText(ctx, node.total_entries.toString(), pos)
-
-        let textPos = pos.sub(new Vector(0, size + 10))
-        this.drawText(ctx, node.name, textPos)
-      }
+      let textPos = pos.sub(new Vector(0, size + 10))
+      this.drawText(ctx, tag.name, textPos)
     });
   }
 
-  updateCanvas() {
-    const canvas = this.canvas_ref.current;
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
-
-    ctx.clearRect(0, 0, w, h)
-    this.drawEdges(ctx)
-    this.drawNodes(ctx)
-  }
-
-  registerOnWheel() {
-    let self = this
-    this.canvas_ref.current.addEventListener('wheel', (e) => {
-      event.preventDefault()
-
-      let oldZoom = self.zoom
-      self.zoom += WHEEL_SENSITIVITY * event.deltaY
-
-      if (self.zoom < MIN_ZOOM) self.zoom = MIN_ZOOM
-      if (self.zoom > MAX_ZOOM) self.zoom = MAX_ZOOM
-
-      self.updateTopLft(self.top_lft.add(new Vector(600, 400).multiply(oldZoom - self.zoom)))
-    }, { passive: false })
-  }
-
   componentDidMount() {
-    this.registerOnWheel()
-
     let self = this
-    this.counter = 500
-    this.physicsTimer = setInterval(() => {
-      if (self.counter == 0) {
-        return
-      }
+    let center = new Vector(SPACE_WIDTH/2, SPACE_HEIGHT/2)
+    GraphSingleton.load(center).then(() => {
+      self.registerOnWheel()
 
-      self.counter--
-      this.graph.update()
-    }, 50);
+      self.physicsTimer = setInterval(() => {
+        GraphSingleton.update()
+        GraphSingleton.main_tag.pos = center
+      }, 50);
 
-    setInterval(() => {
-      this.updateCanvas()
-    }, 50);
+      setInterval(() => {
+        const canvas = self.canvas_ref.current;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
 
-    fetch("/all")
-      .then(res => res.json())
-      .then(
-        (result) => {
-          for (let i = 0; i < result.entries.length; i++) {
-            let entry = result.entries[i]
-            this.graph.createEntryNode(entry)
-            this.entriesById[entry.id] = entry
-          }
-          
-          for (let i = 0; i < result.tags.length; i++) {
-            this.graph.createTagNode(result.tags[i])
-            this.next_tag_id = Math.max(this.next_tag_id, result.tags[i].id+1)
-          }
+        ctx.clearRect(0, 0, w, h)
+        self.drawEdges(ctx)
+        self.drawNodes(ctx)
+      }, 50);
 
-          this.graph.createIrModel()
-          this.graph.setMainTags(result.main_tags)
-          this.graph.rankNodes("")
-        },
-        (error) => {
-          this.setState({
-            isLoaded: true,
-            error
-          });
-        }
-      )
-  }
-
-  deleteEntry(id){
-    this.setState(prevState => ({
-      entries: prevState.entries.filter(e => e.id != id )
-    }))
+      self.registerOnMouseDrag()
+      RankerSingleton.createVocab(GraphSingleton.getEntries())
+    })
   }
 
   render() {
     let self = this
-    let token = getCookie('csrftoken')
-    function addEntry(event) {
-      let tag = self.graph.selected_node
-      let json = {
-        parent_id: tag.id,
-        title: 'New entry'
-      }
-
-      fetch('/entry/', {
-        method: 'post',
-        mode: 'same-origin',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRFToken': token,
-        },
-        credentials: 'include',
-        body: JSON.stringify(json),
-      }).then(function(response) {
-        return response.json();
-      }).then(function(entry) {
-        self.graph.createEntryNode(entry)
-        self.entriesById[entry.id] = entry
-        tag.entries.unshift(entry.id)
-
-        let entries = self.state.entries
-        entries.unshift(entry)
-        self.setState({
-          entries: entries
-        })
-      })
-    }
-
     return (
       <div className="app">
         <div className="app-body">
           <div className="main">
             <div className="main-container">
-              <canvas width="800" height="800" ref={this.canvas_ref} 
+              <canvas width={CANVAS_WIDTH} height={CANVAS_HEIGHT} ref={this.canvas_ref} 
                 onMouseMove={e => this.handleMouse(e)} 
                 onMouseDown={e => this.handleMouse(e)} 
                 onMouseUp={e => this.handleMouse(e)} />
@@ -820,11 +343,10 @@ class Main extends Component {
               <div>
                 <input className="query-box" type="text" value={this.state.query} onChange={e => this.updateQuery(e)} />
               </div>
-              <span className="btn" onClick={addEntry}>ADD ENTRY</span> &nbsp;
-              <TagEditor tag={this.state.tag} />
+              <Tag tag={this.state.tag} _handleAddEntry={this.addEntry.bind(this)} />
               <div>
                 {this.state.entries.map(entry => {
-                  return <LogEntry entry={entry} key={entry.id} _handleDelete={this.deleteEntry.bind(this)} />;
+                  return <Entry entry={entry} key={entry.id} query={this.state.query} _handleDelete={this.deleteEntry.bind(this)} />;
                 })}
               </div>
             </div>
@@ -839,4 +361,4 @@ window.addEventListener('mouseup', (event) => {
   holding_mouse = false
 })
 
-export default Main ;
+export default Main;
