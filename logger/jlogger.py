@@ -168,6 +168,7 @@ class Logger:
 
   # ------- Entries --------
   def get_entry_by_id(self, id):
+    id = int(id)
     if id in self.entries_by_id:
       return self.entries_by_id[id]
     raise Exception('Entry with id %d does not exist' % id)
@@ -201,16 +202,19 @@ class Logger:
         
       elif hasattr(entry, attr):
         if not callable(getattr(entry, attr)) and not attr.startswith("__"):
-          if attr == 'content':
+          if attr == 'id':
+            entry.id = int(attributes[attr])
+          elif attr == 'content':
             entry.content = attributes[attr].split('\n')
           else:
             setattr(entry, attr, attributes[attr])
-    self.modified_at = datetime.datetime.now()
+    entry.modified_at = datetime.datetime.now()
     return entry
 
 
   # ------- Tags --------
   def get_tag_by_id(self, id):
+    id = int(id)
     if id in self.tags_by_id:
       return self.tags_by_id[id]
     raise Exception('Tag with id %d does not exist' % id)

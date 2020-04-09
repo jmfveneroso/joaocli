@@ -247,12 +247,16 @@ class Graph {
   updateEntryTitle(id, title) {
     let entry = this.entries[id]
     entry.title = title
+    entry.modified_at = new Date(Date.now())
+    entry.category.recalculateModifiedTime()
     return API.updateEntryContent(id, title, entry.content)
   }
 
   updateEntryContent(id, new_content) {
     let entry = this.entries[id]
     entry.content = new_content
+    entry.modified_at = new Date(Date.now())
+    entry.category.recalculateModifiedTime()
     return API.updateEntryContent(id, entry.title, new_content)
   }
 

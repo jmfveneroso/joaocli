@@ -61,7 +61,7 @@ class Tag:
       'children': [t.id for t in self.children],
       'entries': [e.id for e in self.get_entries()],
       'total_entries': self.total_entries,
-      'modified_at': date_to_str(self.modified_at),
+      'modified_at': date_to_str(self.modified_at - datetime.timedelta(hours=3)),
     }
 
   def print_header(self):

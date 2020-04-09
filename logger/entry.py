@@ -44,8 +44,8 @@ class Entry:
       'id': self.id,
       'title': self.title,
       'content': '\n'.join(self.content),
-      'created_at': date_to_str(self.created_at),
-      'modified_at': date_to_str(self.modified_at),
+      'created_at': date_to_str(self.created_at - datetime.timedelta(hours=3)),
+      'modified_at': date_to_str(self.modified_at - datetime.timedelta(hours=3)),
       'category': self.category.id,
     }
 

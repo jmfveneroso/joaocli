@@ -25,10 +25,12 @@ urlpatterns = [
   path('', views.index),
 ]
 
-router = routers.DefaultRouter()
-router.register(r'entries', views.EntryViewSet, basename='entries')
-urlpatterns += router.urls
+urlpatterns += [
+    path("entries/<int:pk>/", views.EntryViewSet.as_view(), name="entries"),
+    path("entries/", views.EntryViewSet.as_view(), name="entries"),
+]
 
-router = routers.DefaultRouter()
-router.register(r'tags', views.TagViewSet, basename='tags')
-urlpatterns += router.urls
+urlpatterns += [
+    path("tags/<int:pk>/", views.TagViewSet.as_view(), name="tags"),
+    path("tags/", views.TagViewSet.as_view(), name="tags"),
+]

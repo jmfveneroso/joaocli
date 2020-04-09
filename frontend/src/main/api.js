@@ -56,7 +56,7 @@ class API {
   }
 
   static deleteEntry(id) {
-    return API.request('/entries/', 'delete', { id: id })
+    return API.request('/entries/' + id.toString() + '/', 'delete', { id: id })
   }
 
   static createTag(name, parent_id) {
@@ -75,7 +75,7 @@ class API {
   }
 
   static deleteTag(id) {
-    return API.request('/tags/', 'delete', {
+    return API.request('/tags/' + id.toString() + '/', 'delete', {
       id: id
     })
   }

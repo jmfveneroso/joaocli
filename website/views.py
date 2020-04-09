@@ -4,6 +4,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import TemplateView
 from rest_framework import routers, serializers, viewsets
 from rest_framework.response import Response
+from rest_framework.decorators import action
+from rest_framework.views import APIView
 
 from logger import jlogger
 import json
@@ -22,7 +24,7 @@ class EntrySerializer(serializers.Serializer):
   category = serializers.IntegerField(read_only=True)
   content = serializers.CharField(max_length=999999)
 
-class EntryViewSet(viewsets.ViewSet):
+class EntryViewSet(APIView):
   serializer_class = EntrySerializer
 
   def list(self, request):
@@ -50,11 +52,9 @@ class EntryViewSet(viewsets.ViewSet):
     serializer = EntrySerializer(instance=e.to_json())
     return Response(serializer.data)
 
-  def delete(self, request):
-    body_unicode = request.body.decode('utf-8')
-    body = json.loads(body_unicode)
+  def delete(self, request, pk=None):
     logger = jlogger.Logger()
-    e = logger.delete_entry(body['id'])
+    e = logger.delete_entry(int(pk))
     logger.save()
     serializer = EntrySerializer(instance=e.to_json())
     return Response(serializer.data)
@@ -69,7 +69,7 @@ class TagSerializer(serializers.Serializer):
   )
   total_entries = serializers.IntegerField(read_only=True)
 
-class TagViewSet(viewsets.ViewSet):
+class TagViewSet(APIView):
   serializer_class = TagSerializer
 
   def list(self, request):
@@ -97,11 +97,9 @@ class TagViewSet(viewsets.ViewSet):
     serializer = TagSerializer(instance=tag.to_json())
     return Response(serializer.data)
 
-  def delete(self, request):
-    body_unicode = request.body.decode('utf-8')
-    body = json.loads(body_unicode)
+  def delete(self, request, pk=None):
     logger = jlogger.Logger()
-    tag = logger.delete_tag(int(body['id']))
+    tag = logger.delete_tag(int(pk))
     logger.save()
     serializer = TagSerializer(instance=tag.to_json())
     return Response(serializer.data)
