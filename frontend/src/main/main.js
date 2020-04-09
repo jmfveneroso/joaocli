@@ -223,6 +223,7 @@ class Main extends Component {
     ctx.fill()
     ctx.lineWidth = lineWidth
     ctx.strokeStyle = '#000000'
+    ctx.closePath()
     ctx.stroke()
     ctx.restore()
   }
@@ -236,6 +237,7 @@ class Main extends Component {
     ctx.fillStyle = '#000000'
     ctx.lineWidth = 1
     ctx.strokeStyle = '#ff0000'
+    ctx.closePath()
     ctx.stroke()
     ctx.restore()
   }

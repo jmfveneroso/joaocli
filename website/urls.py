@@ -16,12 +16,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from . import views
+from rest_framework import routers
+from logger import jlogger
+import json
 
 urlpatterns = [
-  path('entry/<int:entry_id>/', views.entry),
-  path('entry/', views.entry),
-  path('tag/<int:tag_id>/', views.tag),
-  path('tag/', views.tag),
   path('all/', views.all),
   path('', views.index),
 ]
+
+router = routers.DefaultRouter()
+router.register(r'entries', views.EntryViewSet, basename='entries')
+urlpatterns += router.urls
+
+router = routers.DefaultRouter()
+router.register(r'tags', views.TagViewSet, basename='tags')
+urlpatterns += router.urls

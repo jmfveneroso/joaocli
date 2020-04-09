@@ -187,8 +187,10 @@ class Logger:
     return new_entry
 
   def delete_entry(self, id):
+    entry = self.entries_by_id[id]
     if int(id) in self.entries_by_id:
       del self.entries_by_id[id]
+    return entry
 
   def edit_entry(self, attributes):
     entry = self.get_entry_by_id(int(attributes['id']))
@@ -204,6 +206,7 @@ class Logger:
           else:
             setattr(entry, attr, attributes[attr])
     self.modified_at = datetime.datetime.now()
+    return entry
 
 
   # ------- Tags --------
@@ -241,6 +244,7 @@ class Logger:
         del self.entries_by_id[e.id]
       del self.tags_by_id[c.id]
       del self.tags_by_name[c.name]
+    return tag
 
   def edit_tag(self, attributes):
     tag = self.get_tag_by_id(int(attributes['id']))
@@ -250,3 +254,4 @@ class Logger:
       tag.parent.delete_child(int(attributes['id']))
       new_parent = self.get_tag_by_id(attributes['parent'])
       new_parent.add_child(tag)
+    return tag

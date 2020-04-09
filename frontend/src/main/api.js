@@ -21,11 +21,11 @@ class API {
     return fetch(url, {
       method: method,
       mode: 'same-origin',
-      credentials: 'include',
+      // credentials: 'include',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie(),
+        // 'X-CSRFToken': getCookie(),
       },
       body: JSON.stringify(body)
     }).then(function(response) {
@@ -33,36 +33,15 @@ class API {
     })
   }
 
-  static createTag(name, parent_id) {
-    return API.request('/tag/', 'post', {
-      name: name,  
-      parent: parent_id, 
-    })
-  }
-
-  static editTag(id, name, parent_id) {
-    return API.request('/tag/', 'put', {
-      id: id,
-      name: name,
-      parent: parent_id,
-    })
-  }
-
-  static deleteTag(id) {
-    return API.request('/tag/', 'delete', {
-      id: id
-    })
-  }
-
   static createEntry(id, title) {
-    return API.request('/entry/', 'post', {
+    return API.request('/entries/', 'post', {
       parent_id: id,
       title: title,
     })
   }
 
   static updateEntryContent(id, title, content) {
-    return API.request('/entry/', 'put', {
+    return API.request('/entries/', 'patch', {
       id: id,
       title: title,
       content: content,
@@ -70,14 +49,35 @@ class API {
   }
 
   static updateEntryTag(id, tag_name) {
-    return API.request('/entry/', 'put', {
+    return API.request('/entries/', 'patch', {
       id: id,
       tag: tag_name,
     })
   }
 
   static deleteEntry(id) {
-    return API.request('/entry/', 'delete', { id: id })
+    return API.request('/entries/', 'delete', { id: id })
+  }
+
+  static createTag(name, parent_id) {
+    return API.request('/tags/', 'post', {
+      name: name,  
+      parent: parent_id, 
+    })
+  }
+
+  static editTag(id, name, parent_id) {
+    return API.request('/tags/', 'patch', {
+      id: id,
+      name: name,
+      parent: parent_id,
+    })
+  }
+
+  static deleteTag(id) {
+    return API.request('/tags/', 'delete', {
+      id: id
+    })
   }
 
   static getAll() {

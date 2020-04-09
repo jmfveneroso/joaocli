@@ -1,5 +1,6 @@
 requests
 psycopg2-binary
+djangorestframework
 django-webpack-loader
 Django
 Sphinx
