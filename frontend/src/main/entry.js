@@ -64,20 +64,21 @@ class Entry extends Component {
     let self = this
     let entry = this.entry
     let title = this.state.title
-    let modified_at = entry.modified_at.toString()
+    let modified_at = entry.modified_at
 
     let content = this.state.content
     if (this.state.enable_editor) {
       let options = { lineNumbers: true };
       return (
         <div className="log-entry">
-          <span className="title">{entry.id} -</span> 
-          <input type="text" value={title} onChange={e => self.updateTitle(e)} /> 
-          <div>
-            <span className="enable-editor" onClick={e => self.disableEditor(e)}>VIEW</span> 
+          <input className="edit-title" type="text" value={title} onChange={e => self.updateTitle(e)} /> 
+          <div className="buttons">
+            <span className="entry-btn" onClick={e => self.disableEditor(e)}>VIEW</span> 
+            <span className="entry-btn" onClick={e => self.deleteEntry(e)}>DELETE</span>
+            <span className="entry-btn" onClick={e => self.moveEntry(e)}>MOVE</span> 
           </div>
           <div className="timestamp">
-            <span className="modified-at">{modified_at}</span>
+            <span className="modified-at">{modified_at.toLocaleString()}</span>
           </div>
           <div className="tags">{entry.category.name}</div>
           <CodeMirror value={content} 
@@ -88,15 +89,14 @@ class Entry extends Component {
     } else {
       return (
         <div className="log-entry">
-          <span className="title">{entry.id} -</span>
-          <span>{title}</span>
-          <div>
-            <span className="enable-editor" onClick={e => self.enableEditor(e)}>EDIT</span> &nbsp;
-            <span className="enable-editor" onClick={e => self.deleteEntry(e)}>DELETE</span> &nbsp;
-            <span className="enable-editor" onClick={e => self.moveEntry(e)}>MOVE</span> 
+          <div className="title">{entry.id} {title}</div>
+          <div className="buttons">
+            <span className="entry-btn" onClick={e => self.enableEditor(e)}>EDIT</span>
+            <span className="entry-btn" onClick={e => self.deleteEntry(e)}>DELETE</span>
+            <span className="entry-btn" onClick={e => self.moveEntry(e)}>MOVE</span> 
           </div>
           <div className="timestamp">
-            <span className="modified-at">{modified_at}</span>
+            <span className="modified-at">{modified_at.toLocaleString()}</span>
           </div>
           <div className="tags">{entry.category.name}</div>
           <div className="content">

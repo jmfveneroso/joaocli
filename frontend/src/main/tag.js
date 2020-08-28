@@ -55,28 +55,29 @@ class Tag extends Component {
     if (this.state.editor_enabled) {
       return (
         <div className="tag-info">
-          <span>({tag.id})</span> - &nbsp;
-          <input type="text" value={this.state.tag_name} onChange={e => updateTitle(e)} /> - &nbsp;
-          <span>{tag.modified_at.toString() }</span>
-          <div>
-            <span className="btn" onClick={disableEditor}>VIEW</span> &nbsp;
-            <span className="btn" onClick={addEntry}>+ ENTRY</span> &nbsp;
-            <span className="btn" onClick={addTag}>+ TAG</span> &nbsp;
-            <span className="btn" onClick={deleteTag}>DELETE</span> &nbsp;
+          <div className="tag-header">
+            <input className="tag-edit-name" type="text" value={this.state.tag_name} onChange={e => updateTitle(e)} />
+          </div>
+          <div className="tag-buttons">
+            <span className="btn" onClick={disableEditor}>VIEW</span>
+            <span className="btn" onClick={addEntry}>+ ENTRY</span>
+            <span className="btn" onClick={addTag}>+ TAG</span>
+            <span className="btn" onClick={deleteTag}>DELETE</span>
           </div>
         </div>
       )
     } else {
       return (
         <div className="tag-info">
-          <span>({tag.id})</span> - &nbsp;
-          <span>{this.state.tag_name}</span> - &nbsp;
-          <span>{tag.modified_at.toString() }</span>
-          <div>
-            <span className="btn" onClick={enableEditor}>EDIT</span> &nbsp;
-            <span className="btn" onClick={addEntry}>+ ENTRY</span> &nbsp;
-            <span className="btn" onClick={addTag}>+ TAG</span> &nbsp;
-            <span className="btn" onClick={deleteTag}>DELETE</span> &nbsp;
+          <div className="tag-header">
+            <span className="tag-name">{this.state.tag_name}</span> &nbsp;
+            <span className="tag-date">{tag.modified_at.toLocaleString() }</span>
+          </div>
+          <div className="tag-buttons">
+            <span className="btn" onClick={enableEditor}>EDIT</span>
+            <span className="btn" onClick={addEntry}>+ ENTRY</span>
+            <span className="btn" onClick={addTag}>+ TAG</span>
+            <span className="btn" onClick={deleteTag}>DELETE</span>
           </div>
         </div>
       )

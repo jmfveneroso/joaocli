@@ -73,12 +73,11 @@ class Logger:
       tag_name, tag_id = line[num_spaces:].strip().split(' ')
       tag_id = int(tag_id)
 
-      if tag_name in self.tags_by_name:
-        raise Exception('Duplicate tag %s' % tag_name)
-
-      tag = Tag(tag_id, tag_name, [])
-      self.tags_by_name[tag_name] = tag
-      self.tags_by_id[tag_id] = tag
+      if tag_name not in self.tags_by_name:
+        # raise Exception('Duplicate tag %s' % tag_name)
+        tag = Tag(tag_id, tag_name, [])
+        self.tags_by_name[tag_name] = tag
+        self.tags_by_id[tag_id] = tag
 
       while cur_indents >= num_indents:
         stack.pop()

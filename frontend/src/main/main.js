@@ -15,20 +15,16 @@ const WHEEL_SENSITIVITY = 0.01
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 16
 const DOUBLE_CLICK_DELAY = 300
-const CANVAS_WIDTH = 600
-const CANVAS_HEIGHT = 600
-const SPACE_WIDTH = MAX_ZOOM * CANVAS_WIDTH
-const SPACE_HEIGHT = MAX_ZOOM * CANVAS_HEIGHT
+let CANVAS_WIDTH = 600
+let CANVAS_HEIGHT = 600
+let SPACE_WIDTH = MAX_ZOOM * CANVAS_WIDTH
+let SPACE_HEIGHT = MAX_ZOOM * CANVAS_HEIGHT
 
 class Main extends Component {
   constructor(props) {
     super(props);
     this.canvas_ref = React.createRef()
     this.zoom = 4
-    this.top_lft = new Vector(
-      (SPACE_WIDTH - CANVAS_WIDTH*this.zoom)/2, 
-      (SPACE_HEIGHT - CANVAS_HEIGHT*this.zoom)/2
-    )
 
     this.hold_mouse_timer = null
     this.mouseX = 0
@@ -88,11 +84,11 @@ class Main extends Component {
         })  
       }
       self.setState({ entries: entries })
-    }, 300)
+    }, 500)
   }
 
   getMousePos() {
-    return new Vector(this.mouse_x, this.mouse_y).sub(new Vector(20, 20))
+    return new Vector(this.mouse_x, this.mouse_y)
   }
 
   maybeGetClickedTag(mouse_pos) {
@@ -171,7 +167,7 @@ class Main extends Component {
       if (!holding_mouse && !GraphSingleton.replacing) return
 
       if (GraphSingleton.replacing || GraphSingleton.dragging_tag) {
-        let mousePos = new Vector(self.new_mouse_x, self.new_mouse_y).sub(new Vector(20, 20))
+        let mousePos = new Vector(self.new_mouse_x, self.new_mouse_y)
         GraphSingleton.selected_node.pos = self.top_lft.add(mousePos.multiply(self.zoom))
         Physics.temperature = 500
       } else {
@@ -208,7 +204,7 @@ class Main extends Component {
       if (self.zoom < MIN_ZOOM) self.zoom = MIN_ZOOM
       if (self.zoom > MAX_ZOOM) self.zoom = MAX_ZOOM
 
-      let stride = new Vector(400, 400).multiply(old_zoom - self.zoom)
+      let stride = new Vector(CANVAS_WIDTH/2, CANVAS_HEIGHT/2).multiply(old_zoom - self.zoom)
       self.updateTopLft(self.top_lft.add(stride))
     }, { passive: false })
   }
@@ -222,7 +218,7 @@ class Main extends Component {
     ctx.fillStyle = color
     ctx.fill()
     ctx.lineWidth = lineWidth
-    ctx.strokeStyle = '#000000'
+    ctx.strokeStyle = '#555'
     ctx.closePath()
     ctx.stroke()
     ctx.restore()
@@ -234,9 +230,9 @@ class Main extends Component {
     ctx.rect(pos.x, pos.y, size.x, size.y);
     ctx.fillStyle = '#ee9999'
     ctx.fill()
-    ctx.fillStyle = '#000000'
+    ctx.fillStyle = '#777'
     ctx.lineWidth = 1
-    ctx.strokeStyle = '#ff0000'
+    ctx.strokeStyle = '#18b32c'
     ctx.closePath()
     ctx.stroke()
     ctx.restore()
@@ -294,7 +290,7 @@ class Main extends Component {
       days_old = (days_old > 14) ? 14 : days_old
       let lightness = 50 + (-days_old * 45 / 14)
 
-      this.drawCircle(ctx, pos, size, 'hsl(142, 100%, ' + lightness.toString() + '%)', line_width)
+      this.drawCircle(ctx, pos, size, 'hsl(125, 50%, ' + lightness.toString() + '%)', line_width)
       this.drawText(ctx, tag.total_entries.toString(), pos)
 
       let textPos = pos.sub(new Vector(0, size + 10))
@@ -304,17 +300,27 @@ class Main extends Component {
 
   componentDidMount() {
     let self = this
+    const canvas = self.canvas_ref.current
+    canvas.width = window.innerWidth - 650
+    canvas.height = window.innerHeight
+    CANVAS_WIDTH = canvas.width
+    CANVAS_HEIGHT = canvas.height
+    SPACE_WIDTH = MAX_ZOOM * CANVAS_WIDTH
+    SPACE_HEIGHT = MAX_ZOOM * CANVAS_HEIGHT
+    this.top_lft = new Vector(
+      (SPACE_WIDTH - CANVAS_WIDTH*this.zoom)/2, 
+      (SPACE_HEIGHT - CANVAS_HEIGHT*this.zoom)/2
+    )
     let center = new Vector(SPACE_WIDTH/2, SPACE_HEIGHT/2)
+
     GraphSingleton.load(center).then(() => {
       self.registerOnWheel()
-
       self.physicsTimer = setInterval(() => {
         GraphSingleton.update()
         GraphSingleton.main_tag.pos = center
       }, 50);
 
       setInterval(() => {
-        const canvas = self.canvas_ref.current;
         const ctx = canvas.getContext('2d');
         const w = canvas.width;
         const h = canvas.height;
@@ -342,11 +348,11 @@ class Main extends Component {
                 onMouseUp={e => this.handleMouse(e)} />
             </div>
             <div className="log-entries">
-              <div>
+              <div className="query-container">
                 <input className="query-box" type="text" value={this.state.query} onChange={e => this.updateQuery(e)} />
               </div>
               <Tag tag={this.state.tag} _handleAddEntry={this.addEntry.bind(this)} />
-              <div>
+              <div className="log-entries-items">
                 {this.state.entries.map(entry => {
                   return <Entry entry={entry} key={entry.id} query={this.state.query} _handleDelete={this.deleteEntry.bind(this)} />;
                 })}

@@ -14,52 +14,71 @@ p {
     display: block;
     margin: 20px 20px;
   }
-  canvas {
-    margin: 20px 20px;
-    border: 1px dotted #999;
-  }
+  canvas {}
 }
 
 .log-entries {
-  background-color: #eee;
-  padding: 25px;
+  background-color: #2c2c2c;
+  color: #cccccc;
+  padding: 10px;
   float: right;
-  width: 40%;
-  overflow-y: auto;
-  height: 800px;
+  width: 650px;
+  height: 100vh;
   .log-entry {
-    border: 1px solid black;
-    margin: 15px 15px;
     padding: 5px 10px;
 
     .title {
+      display: inline-block;
       font-size: 14px;
       font-weight: bold;
+      width: 400px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .buttons {
+      display: inline-block;
+      font-size: 14px;
+      font-weight: bold;
+      float: right;
+      .entry-btn {
+        cursor: pointer;
+        border: 1px solid #999;
+        padding: 2px 5px;
+        font-size: 11px;
+      }
+      .entry-btn:not(:last-child) {
+        margin-right: 10px;
+      }
     }
     .modified-at {
-      color: #197676;
+      color: #3ecece;
     }
     .created-at {
       color: #004bff;
     }
     .tags {
-      color: #810b46;
+      color: #e6318c;
     }
+  }
+  .log-entry:not(:first-child) {
+    border-top: 1px solid #222;
+  }
+  .log-entry:not(:last-child) {
+    border-bottom: 1px solid #444;
+  }
+  .log-entries-items {
+    overflow-y: auto;
+    height: 100%;
   }
 }
 
-.query-box {
-  margin: 15px 15px;
-  padding: 5px;
-  width: 500px;
-}
-
-.enable-editor {
-  font-weight: bold;
-  cursor: pointer;
-  border: 1px solid #999;
-  border-radius: 5px;
-  padding: 2px 5px;
+.query-container {
+  padding: 10px;
+  .query-box {
+    padding: 5px;
+    width: 100%;
+  }
 }
 
 .btn {
@@ -72,5 +91,37 @@ p {
 }
 
 .tag-info {
-  margin: 15px 15px;
+  padding: 10px;
+  border-bottom: 1px solid #222;
+  .tag-header {
+    width: 300px;
+    font-size: 15px;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    .tag-name {
+      line-height: 29px;
+    }
+    .tag-date {
+      font-size: 11px;
+      color: #3ecece;
+    }
+    .tag-edit-name {
+      line-height: 23px;
+    }
+  }
+  .tag-buttons {
+    display: inline-block;
+    float: right;
+    padding: 4px 0px;
+    .btn {
+      font-size: 11px;
+      color: #333;
+      background-color: #ccc;
+    }
+    .btn:not(:last-child) {
+      margin-right: 10px;
+    }
+  }
 }
